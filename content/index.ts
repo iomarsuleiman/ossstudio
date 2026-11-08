@@ -1,0 +1,110 @@
+import { RAW_PROJECTS, type CategoryCode, type OpennessCode } from "./projects";
+import { RAW_ROOMS, CATEGORY_ROOM, ROOM_OVERRIDES, type RoomId } from "./rooms";
+import { OPENING, type Motif } from "./opening";
+import { layoutGallery, type ExhibitPlacement, type DoorPlacement, type RoomShape } from "./layout";
+
+export type Locale = "en" | "ar";
+export const LOCALES: Locale[] = ["en", "ar"];
+export type { RoomId, Motif, CategoryCode, OpennessCode, ExhibitPlacement, DoorPlacement, RoomShape };
+
+export interface ProjectText {
+  oneLine: string;
+  why?: string;
+  installation?: string;
+  caution?: string;
+}
+
+export interface Project {
+  slug: string;
+  title: string;
+  catalogName: string;
+  roomId: RoomId;
+  category: CategoryCode;
+  openness: OpennessCode;
+  site: string;
+  source: string;
+  openingOrder?: number;
+  motif?: Motif;
+  t: Record<Locale, ProjectText>;
+}
+
+export interface Room {
+  id: RoomId;
+  order: number;
+  palette: { fog: string; wall: string; floor: string; accent: string; trim: string };
+  map: { x: number; y: number };
+  t: Record<Locale, { title: string; subtitle: string }>;
+}
+
+export interface GalleryContent {
+  revision: string;
+  source: "convex" | "bundled";
+  rooms: Room[];
+  projects: Project[];
+  exhibits: ExhibitPlacement[];
+  doors: DoorPlacement[];
+  shapes: RoomShape[];
+}
+
+export function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/\+\+/g, "pp")
+    .replace(/\./g, "-")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export const CONTENT_REVISION = "2026-11-08.1";
+
+/** Assemble the bundled catalogue (also used as the Convex seed). */
+export function buildBundledContent(): GalleryContent {
+  const projects: Project[] = RAW_PROJECTS.map((r) => {
+    const slug = slugify(r.title);
+    const extra = OPENING[slug];
+    return {
+      slug,
+      title: r.title,
+      catalogName: r.catalogName ?? r.title,
+      roomId: ROOM_OVERRIDES[slug] ?? CATEGORY_ROOM[r.cat],
+      category: r.cat,
+      openness: r.open,
+      site: r.site,
+      source: r.source,
+      openingOrder: r.order,
+      motif: extra?.motif,
+      t: {
+        en: { oneLine: r.en, why: extra?.why.en, installation: extra?.installation.en, caution: r.cautionEn },
+        ar: { oneLine: r.ar, why: extra?.why.ar, installation: extra?.installation.ar, caution: r.cautionAr },
+      },
+    };
+  });
+  const rooms: Room[] = RAW_ROOMS.map((r) => ({
+    id: r.id, order: r.order, palette: r.palette, map: r.map, t: { en: r.en, ar: r.ar },
+  }));
+  const { exhibits, doors, shapes } = layoutGallery(rooms, projects);
+  return { revision: CONTENT_REVISION, source: "bundled", rooms, projects, exhibits, doors, shapes };
+}
+
+export const OPENNESS_TEXT: Record<OpennessCode, Record<Locale, { label: string; explain: string }>> = {
+  oss: {
+    en: { label: "Open-source software", explain: "Anyone can read, change and share the code." },
+    ar: { label: "برمجيات مفتوحة المصدر", explain: "أي شخص يستطيع قراءة الشيفرة وتعديلها ومشاركتها." },
+  },
+  fullyOpenModel: {
+    en: { label: "Fully open AI model", explain: "The model, the code that trained it and the recipe for its data are all published." },
+    ar: { label: "نموذج ذكاء اصطناعي مفتوح بالكامل", explain: "النموذج وشيفرة تدريبه ووصفة بياناته كلها منشورة." },
+  },
+  openWeights: {
+    en: { label: "Open-weight model", explain: "You can download and run the trained model, but not everything used to make it is public." },
+    ar: { label: "نموذج بأوزان مفتوحة", explain: "يمكنك تنزيل النموذج المدرَّب وتشغيله، لكن ليس كل ما استُخدم لصنعه منشورًا." },
+  },
+  openCore: {
+    en: { label: "Partly open", explain: "Some important parts are open source, and some are not." },
+    ar: { label: "مفتوح جزئيًا", explain: "بعض الأجزاء المهمة مفتوحة المصدر وبعضها ليس كذلك." },
+  },
+  openStandard: {
+    en: { label: "Open standard", explain: "A shared, published specification anyone can build on. It is not a program itself." },
+    ar: { label: "معيار مفتوح", explain: "مواصفات منشورة يستطيع أي أحد البناء عليها. ليست برنامجًا بحد ذاتها." },
+  },
+};
