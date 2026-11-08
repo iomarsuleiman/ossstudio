@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { OPENNESS_TEXT, type GalleryContent, type Locale, type Project, type RoomId } from "@/content";
 import { UI, dirOf } from "@/lib/i18n";
 import { normalise, searchProjects } from "@/lib/search";
@@ -27,6 +27,14 @@ export function IndexList({ content, locale }: { content: GalleryContent; locale
   const [view, setView] = useState<View>("all");
   const [shelf, setShelf] = useState(false);
   const [checkout, setCheckout] = useState<string[] | null>(null);
+  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  useEffect(() => {
+    try { if (localStorage.getItem("osg:listLayout") === "list") setLayout("list"); } catch { /* no storage */ }
+  }, []);
+  const chooseLayout = (l: "grid" | "list") => {
+    setLayout(l);
+    try { localStorage.setItem("osg:listLayout", l); } catch { /* no storage */ }
+  };
   const collected = useCollection();
   const other: Locale = locale === "en" ? "ar" : "en";
 
@@ -78,6 +86,13 @@ export function IndexList({ content, locale }: { content: GalleryContent; locale
             ))}
           </div>
           {filtered && <button type="button" className="btn btn-small btn-quiet" onClick={() => { setQuery(""); setRoom("all"); setView("all"); }}>{ui.clearFilters}</button>}
+          <div className="segmented layout-switch" role="group" aria-label={ui.layoutLabel}>
+            {([["grid", ui.layoutGrid, "▦"], ["list", ui.layoutList, "☰"]] as ["grid" | "list", string, string][]).map(([l, label, icon]) => (
+              <button key={l} type="button" className={layout === l ? "is-on" : ""} aria-pressed={layout === l} onClick={() => chooseLayout(l)}>
+                <span aria-hidden="true">{icon}</span> {label}
+              </button>
+            ))}
+          </div>
         </div>
         {sortedByTitle && (
           <nav className="az" aria-label={ui.azJump}>
@@ -95,7 +110,7 @@ export function IndexList({ content, locale }: { content: GalleryContent; locale
           <button type="button" className="btn" onClick={() => { setQuery(""); setRoom("all"); setView("all"); }}>{ui.clearFilters}</button>
         </div>
       ) : (
-        <ul className="index-grid">
+        <ul className={layout === "list" ? "index-rows" : "index-grid"}>
           {list.map((p, i) => {
             const letter = letterOf(p);
             const firstOfLetter = sortedByTitle && (i === 0 || letterOf(list[i - 1]) !== letter);

@@ -80,7 +80,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
       lx = e.clientX; ly = e.clientY;
     };
     const move = (e: PointerEvent) => {
-      if (e.pointerId !== active || store.mode !== "walk" || store.view === "side") return;
+      if (e.pointerId !== active || store.mode !== "walk") return;
       const sens = e.pointerType === "touch" ? 0.0055 : 0.0034;
       store.targetYaw -= (e.clientX - lx) * sens;
       store.targetPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, store.targetPitch - (e.clientY - ly) * sens));
@@ -117,9 +117,9 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
     }
 
     // --- look ----------------------------------------------------------------
-    const side = s.view === "side";
-    s.viewBlend += ((side ? 1 : 0) - s.viewBlend) * damp(dt, reduced ? 0.05 : 0.45);
-    if (canWalk && !side) {
+    const third = s.view === "third";
+    s.viewBlend += ((third ? 1 : 0) - s.viewBlend) * damp(dt, reduced ? 0.05 : 0.45);
+    if (canWalk) {
       if (s.keys.has("ArrowLeft")) s.targetYaw += KEY_TURN * dt;
       if (s.keys.has("ArrowRight")) s.targetYaw -= KEY_TURN * dt;
     }
@@ -131,20 +131,9 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
     // --- movement intent -------------------------------------------------------
     const fwd = { x: Math.sin(s.yaw), z: Math.cos(s.yaw) };
     const right = { x: -Math.cos(s.yaw), z: Math.sin(s.yaw) };
+    // Same controls in both views: walking is relative to where the camera looks.
     let f = 0, r = 0;
-    // Side view: left/right walks along the hall as seen on screen, up/down
-    // moves toward or away from the wall in view.
-    let along = 0, depth = 0;
-    if (canWalk && side) {
-      if (s.keys.has("KeyD") || s.keys.has("ArrowRight")) along += 1;
-      if (s.keys.has("KeyA") || s.keys.has("ArrowLeft")) along -= 1;
-      if (s.keys.has("KeyW") || s.keys.has("ArrowUp")) depth += 1;
-      if (s.keys.has("KeyS") || s.keys.has("ArrowDown")) depth -= 1;
-      along += s.joy.x;
-      depth += s.joy.y;
-      if (Math.abs(depth) < 0.05) s.depthInvert = false;
-      if (s.depthInvert) depth = -depth;
-    } else if (canWalk) {
+    if (canWalk) {
       if (s.keys.has("KeyW") || s.keys.has("ArrowUp")) f += 1;
       if (s.keys.has("KeyS") || s.keys.has("ArrowDown")) f -= 1;
       if (s.keys.has("KeyD")) r += 1;
@@ -153,14 +142,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
       r += s.joy.x;
     }
     let want = { x: 0, z: 0 };
-    if (along || depth) {
-      s.target = null;
-      s.targetExhibit = null;
-      const len = Math.max(1, Math.hypot(along, depth));
-      // Camera on +x looks toward -x: screen-right is -z and "into the screen" is -x.
-      const sg = s.sideSign;
-      want = { x: ((-sg * depth) / len) * WALK_SPEED, z: ((-sg * along) / len) * WALK_SPEED };
-    } else if (f || r) {
+    if (f || r) {
       s.target = null;
       s.targetExhibit = null;
       const len = Math.max(1, Math.hypot(f, r));
@@ -215,28 +197,14 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
     const speed = Math.hypot(s.vel.x, s.vel.z);
     const speedN = Math.min(1, speed / WALK_SPEED);
 
-    if (side) {
-      // The figure turns to face where she walks.
-      if (speed > 0.15) s.targetYaw = Math.atan2(s.vel.x, s.vel.z);
-      // Cross the middle of the path and the camera swings round to the other
-      // side, so the far wall is always the one in view.
-      const flip = (s.sideSign > 0 && s.pos.x > 1.2) || (s.sideSign < 0 && s.pos.x < -1.2);
-      if (flip) {
-        s.sideSign = s.sideSign > 0 ? -1 : 1;
-        if (Math.abs(s.joy.y) > 0.05 || ["KeyW", "KeyS", "ArrowUp", "ArrowDown"].some((k) => s.keys.has(k))) s.depthInvert = !s.depthInvert;
-      }
-    }
+    // The figure (seen in third person) turns gracefully to face where it walks;
+    // standing still it keeps its heading.
+    if (speed > 0.15) s.bodyYaw += angleDelta(s.bodyYaw, Math.atan2(s.vel.x, s.vel.z)) * damp(dt, 0.12);
+    if (s.snapCamera || !third) s.bodyYaw = s.yaw;
 
     // --- what you're looking at ------------------------------------------------------
     let best: ExhibitPlacement | null = null, bestScore = Infinity;
-    if (side) {
-      for (const e of exhibits) {
-        const inView = e.kind !== "frame" || e.x * s.sideSign < 0;
-        const d = Math.hypot(e.spawn.x - s.pos.x, e.spawn.z - s.pos.z);
-        if (inView && d < 1.9 && d < bestScore) { bestScore = d; best = e; }
-      }
-    }
-    if (!side) for (const e of exhibits) {
+    for (const e of exhibits) {
       const c = artworkCentre(e);
       const dx = c.x - s.pos.x, dz = c.z - s.pos.z;
       const d = Math.hypot(dx, dz);
@@ -269,7 +237,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
     const sway = reduced ? 0 : Math.sin(s.walkPhase) * 0.018 * speedN;
 
     // --- camera pose ------------------------------------------------------------------------
-    const baseFov = s.view === "side" ? (aspect < 1 ? 60 : 45) : aspect < 1 ? 74 : 62;
+    const baseFov = third ? (aspect < 1 ? 70 : 58) : aspect < 1 ? 74 : 62;
     const fov = baseFov + (reduced ? 0 : speedN * 2.5);
     if (Math.abs(persp.fov - fov) > 0.01) { persp.fov += (fov - persp.fov) * damp(dt, 0.4); persp.updateProjectionMatrix(); }
 
@@ -278,18 +246,18 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
     const cp = Math.cos(s.pitch);
     const ahead = eye.clone().add(new THREE.Vector3(Math.sin(s.yaw) * cp, Math.sin(s.pitch), Math.cos(s.yaw) * cp));
 
-    // Side pose: the camera orbits to the side of the figure, a little above,
-    // easing round in an arc when it changes sides.
-    const targetAngle = s.sideSign > 0 ? 0 : Math.PI;
-    if (s.snapCamera) s.sideAngle = targetAngle;
-    s.sideAngle += angleDelta(s.sideAngle, targetAngle) * damp(dt, reduced ? 0.05 : 0.6);
-    const dist = aspect < 1 ? 9.5 : 8.2;
-    const lead = { x: s.vel.x * 0.35, z: s.vel.z * 0.35 };
-    const focus = new THREE.Vector3(s.pos.x + lead.x, 1.25, s.pos.z + lead.z);
-    const sideCam = focus.clone().add(new THREE.Vector3(Math.cos(s.sideAngle) * dist, 1.5, Math.sin(s.sideAngle) * dist));
+    // Third-person pose: behind and a little above the figure, looking where
+    // you look. Dragging up/down tilts the camera around the figure.
+    const back = aspect < 1 ? 4.6 : 4.0;
+    const camY = Math.max(0.9, Math.min(4.2, 2.25 - s.pitch * 2.4));
+    const chase = new THREE.Vector3(s.pos.x - Math.sin(s.yaw) * back, camY, s.pos.z - Math.cos(s.yaw) * back);
+    // Keep the camera over the walkway, clear of the artwork panels at its edges.
+    chase.x = Math.max(-shape.width / 2 + 0.7, Math.min(shape.width / 2 - 0.7, chase.x));
+    chase.z = Math.max(-shape.length / 2 + 0.4, Math.min(shape.length / 2 - 0.4, chase.z));
+    const focus = new THREE.Vector3(s.pos.x + Math.sin(s.yaw) * 2.2, 1.25 + s.pitch * 2.2, s.pos.z + Math.cos(s.yaw) * 2.2);
 
     const vb = ease(Math.min(1, Math.max(0, s.viewBlend)));
-    const pos = eye.clone().lerp(sideCam, vb);
+    const pos = eye.clone().lerp(chase, vb);
     const look = ahead.clone().lerp(focus, vb);
     let rl = roll.current * (1 - vb);
 
@@ -304,10 +272,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
       rl *= 1 - e;
     }
 
-    // Side view cuts away everything between the camera and the visitor, like
-    // looking into a stage set, so the near wall never blocks the view.
-    const near = vb > 0.95 && s.enter < 0.05 ? Math.max(0.05, dist - 3.4) : 0.05;
-    if (persp.near !== near) { persp.near = near; persp.updateProjectionMatrix(); }
+    if (persp.near !== 0.05) { persp.near = 0.05; persp.updateProjectionMatrix(); }
 
     camera.position.copy(pos);
     camera.lookAt(look);

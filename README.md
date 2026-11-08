@@ -16,13 +16,17 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 - **Linux Distributions** section in Behind the Scenes, under its own arch (Fedora, Arch, Mint, Debian, Ubuntu).
 - **Map + teleport + search** (English and Arabic, diacritic-insensitive) to any room or project.
 - **Accessible index** at `/{locale}/list`: every project as a plain list, never 3D-only. It has search with aliases (e.g. "drawio", "winutil", "7zip") and small-typo tolerance, an A–Z jump bar, room filter, All / Opening Collection / Coming soon / My collection views, Clear filters, thumbnails painted only when they scroll into view, and collect buttons.
-- **Optional side view** (phones and tablets): a GRIS-style side-on camera following an original cloaked figure. The near side is cut away like a stage set, and the camera swings round when you cross the path. Switch with "Side view / First person" in the top bar; your choice is remembered.
+- **Optional third-person view** (all devices): the camera follows an original cloaked figure from behind and a little above. Controls are the same as first person (W A S D or the joystick to walk, drag to look around the figure, tap to glide). The figure turns to face where it walks. Switch with the "Third person / First person" button or the V key; your choice is remembered.
 - **English / Arabic** with proper RTL. Switching language keeps your room, position and open exhibit.
 - **Shareable URLs**: `/{en|ar}`, `/{en|ar}/room/{room}`, `/{en|ar}/exhibit/{slug}`, `/{en|ar}?at={slug}`.
 - **Sound**: original generative ambience (soft pads, sparse piano, room reverb, footsteps, paper sweeps) made with Web Audio. Silent until you choose "Enter with sound". It fades out when the tab is hidden.
 - **Full-site prefetch**: once the entrance is interactive, a queue prepares every artwork and route chunk. It runs 1 connection on phones and 2 elsewhere, retries failures, re-prioritises on teleport, pauses in hidden tabs and respects Save-Data. Progress is shown truthfully ("42 of 192 artworks ready"). Print-size PNGs are never prefetched; they are made only when you download.
 - **Performance**: one persistent canvas that renders on demand. It draws every frame while you move, about 12 fps while you stand still, and nothing behind an open exhibit page or in a hidden tab. Pixel ratio is capped (1.5 on phones, 1.75 on desktop) and adapts to measured frame time. Each room frees its textures when you leave, and teleports lift the veil as soon as the destination's artworks are ready instead of waiting a fixed time.
 - **Reduced motion**: fades instead of sweeps, no sway or lean, still sculptures and petals.
+
+## Which projects are shown
+
+`content/visible.ts` lists the 93 projects currently on display. The other catalogued projects stay in the code and are seeded into Convex as drafts, hidden from the gallery, map, search and list. To show one, add its name to that list. Then, if you use Convex, run `npx convex run seed:run --prod` again.
 
 ## Stack
 

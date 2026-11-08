@@ -110,8 +110,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const [webgl, setWebgl] = useState(true);
   const [reduced, setReduced] = useState(false);
   const [touch, setTouch] = useState(false);
-  // Optional side-on view (offered on touch screens); first person is the default.
-  const [view, setView] = useState<"first" | "side">("first");
+  // Optional third-person view; first person is the default.
+  const [view, setView] = useState<"first" | "third">("first");
   const [prefetch, setPrefetch] = useState<PrefetchState | null>(null);
   const [hint, setHint] = useState(false);
   const [veil, setVeil] = useState<Veil | null>(null);
@@ -137,11 +137,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     setTouch(coarse);
     try {
-      if (coarse && localStorage.getItem("osg:view") === "side") {
-        setView("side");
-        store.view = "side";
+      if (localStorage.getItem("osg:view") === "third") {
+        setView("third");
+        store.view = "third";
         store.viewBlend = 1;
-        store.sideSign = store.pos.x > 0 ? -1 : 1;
+        store.bodyYaw = store.yaw;
       }
     } catch {
       /* storage unavailable */
@@ -360,6 +360,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       const move = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
       if (e.code === "KeyM") { e.preventDefault(); setMapOpen(true); return; }
+      if (e.code === "KeyV") { e.preventDefault(); toggleView(); return; }
       if (e.code === "KeyC" && store.nearby) { e.preventDefault(); collection.toggle(store.nearby.slug); return; }
       const onButton = e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement;
       if (e.code === "KeyE" || (e.key === "Enter" && !onButton)) {
@@ -381,10 +382,26 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     else if (store.mode === "transition" && wash.phase === "idle" && !veil && entered && !openSlug) store.mode = "walk";
   }, [mapOpen, shelfOpen, checkout, store, wash.phase, veil, entered, openSlug]);
 
+  // --- keyboard focus ----------------------------------------------------------------
+  // The world takes focus as soon as you're in, and gets it back whenever an
+  // overlay closes, so the walking keys work without clicking first (also
+  // when the gallery is embedded in another page).
+  const worldEl = useRef<HTMLDivElement>(null);
+  const focusWorld = useCallback(() => {
+    requestAnimationFrame(() => {
+      try { window.focus(); } catch { /* cross-origin parent */ }
+      worldEl.current?.focus({ preventScroll: true });
+    });
+  }, []);
+  useEffect(() => {
+    if (entered && !openSlug && !mapOpen && !shelfOpen && !checkout) focusWorld();
+  }, [entered, openSlug, mapOpen, shelfOpen, checkout, focusWorld]);
+
   // --- entering the gallery -----------------------------------------------------------
   const enterGallery = async (withSound: boolean) => {
     setEntered(true);
     store.mode = "walk";
+    focusWorld();
     if (withSound) { await audio.enable(); setSound(true); }
     setHint(true);
     later(() => setHint(false), 12000);
@@ -398,15 +415,12 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   };
 
   const toggleView = () => {
-    const next = view === "side" ? "first" : "side";
+    // Read from the store so the V shortcut never acts on a stale value.
+    const next = store.view === "third" ? "first" : "third";
     setView(next);
     store.view = next;
-    store.keys.clear();
-    store.joy = { x: 0, y: 0 };
-    store.depthInvert = false;
-    // Start with the camera on the side that shows the nearer wall.
-    if (next === "side") store.sideSign = store.pos.x > 0 ? -1 : 1;
-    else store.targetPitch = 0;
+    store.bodyYaw = store.yaw;
+    store.targetPitch = 0;
     try { localStorage.setItem("osg:view", next); } catch { /* storage unavailable */ }
     setHint(true);
     later(() => setHint(false), 8000);
@@ -449,7 +463,15 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     <div className="gallery" dir={dirOf(locale)} data-reduced={reduced || undefined}>
       <a className="skip-link" href={`/${locale}/list`}>{ui.skipToIndex}</a>
 
-      <div className="world" aria-hidden={!!openSlug}>
+      <div
+        ref={worldEl}
+        className="world"
+        aria-hidden={!!openSlug}
+        tabIndex={-1}
+        role="application"
+        aria-label={`${room.t[locale].title}. ${view === "third" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}`}
+        onPointerDown={() => worldEl.current?.focus({ preventScroll: true })}
+      >
         {webgl ? (
           <World
             content={content}
@@ -506,9 +528,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <button type="button" className="btn btn-glass" onClick={switchLanguage} aria-label={ui.languageLabel} lang={locale === "en" ? "ar" : "en"}>
               {ui.language}
             </button>
-            {touch && (
-              <button type="button" className="btn btn-glass" onClick={toggleView} aria-pressed={view === "side"}>
-                {view === "side" ? ui.viewFirst : ui.viewSide}
+            {(
+              <button type="button" className="btn btn-glass" onClick={toggleView} aria-pressed={view === "third"} aria-keyshortcuts="V">
+                {view === "third" ? ui.viewFirst : ui.viewSide}
               </button>
             )}
             <Link className="btn btn-glass" href={`/${locale}/list`}>{ui.index}</Link>
@@ -545,7 +567,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             )}
           </div>
           {hint && (
-            <p className="controls-hint" role="note">{view === "side" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}</p>
+            <p className="controls-hint" role="note">{view === "third" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}</p>
           )}
         </div>
       )}
@@ -595,7 +617,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <h1 id="arrival-title" className="arrival-title">{ui.siteTitle}</h1>
             <p className="arrival-tagline">{ui.tagline}</p>
             <div className="arrival-actions">
-              <button type="button" className="btn btn-primary btn-large" onClick={() => enterGallery(true)}>{ui.enterSound}</button>
+              <button type="button" className="btn btn-primary btn-large" autoFocus onClick={() => enterGallery(true)}>{ui.enterSound}</button>
               <button type="button" className="btn btn-large" onClick={() => enterGallery(false)}>{ui.enterQuiet}</button>
             </div>
             <p className="arrival-meta muted">

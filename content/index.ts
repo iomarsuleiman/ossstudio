@@ -2,6 +2,7 @@ import { RAW_PROJECTS, type CategoryCode, type OpennessCode } from "./projects";
 import { RAW_ROOMS, CATEGORY_ROOM, ROOM_OVERRIDES, type RoomId } from "./rooms";
 import { OPENING, type Motif } from "./opening";
 import { ALIASES, EXTRA_MOTIFS, NEW_PROJECTS, curatedRoom } from "./catalogue-2";
+import { isShown } from "./visible";
 import { layoutGallery, type ExhibitPlacement, type DoorPlacement, type RoomShape } from "./layout";
 
 export type Locale = "en" | "ar";
@@ -60,11 +61,11 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export const CONTENT_REVISION = "2026-11-08.2";
+export const CONTENT_REVISION = "2026-11-08.3";
 
-/** Assemble the bundled catalogue (also used as the Convex seed). */
-export function buildBundledContent(): GalleryContent {
-  const projects: Project[] = [...RAW_PROJECTS, ...NEW_PROJECTS].map((r) => {
+/** Every catalogued project, including those not currently on display. */
+export function allProjects(): Project[] {
+  return [...RAW_PROJECTS, ...NEW_PROJECTS].map((r) => {
     const slug = r.slug ?? slugify(r.title);
     const extra = OPENING[slug];
     const catalogName = r.catalogName ?? r.title;
@@ -87,6 +88,16 @@ export function buildBundledContent(): GalleryContent {
       },
     };
   });
+}
+
+/** True when the project is currently on display (see content/visible.ts). */
+export function projectShown(p: Project) {
+  return isShown(p.catalogName, p.title);
+}
+
+/** Assemble the catalogue of projects on display (also what Convex publishes). */
+export function buildBundledContent(): GalleryContent {
+  const projects = allProjects().filter(projectShown);
   const rooms: Room[] = RAW_ROOMS.map((r) => ({
     id: r.id, order: r.order, palette: r.palette, map: r.map, t: { en: r.en, ar: r.ar },
   }));

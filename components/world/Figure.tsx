@@ -6,16 +6,17 @@ import * as THREE from "three";
 import type { WorldStore } from "@/lib/worldStore";
 import { mix, paintMaterial, type Atmosphere } from "./paint";
 
-// The visitor as seen in side view: a small, slender figure in a long dress
+// The visitor as seen in third person: a small, slender figure in a long dress
 // with a flowing cape. Only smooth surfaces; the cape is a soft cloth strip
 // whose folds ripple and trail behind as she walks.
 
-const CAPE_W = 10; // columns
-const CAPE_H = 14; // rows
+const CAPE_LEN = 0.86;
 
+/** A curved, tapered cloth wrapping the back and shoulders, flaring to the hem. */
 function capeGeometry() {
-  const g = new THREE.PlaneGeometry(0.42, 0.95, CAPE_W, CAPE_H);
-  g.translate(0, -0.475, 0); // hang from the top edge (shoulders)
+  // An open cone segment around the back (-z): narrow at the shoulders, wide at the hem.
+  const g = new THREE.CylinderGeometry(0.11, 0.27, CAPE_LEN, 28, 16, true, Math.PI - 1.45, 2.9);
+  g.translate(0, -CAPE_LEN / 2, 0); // hang from the shoulders
   return g;
 }
 
@@ -53,7 +54,7 @@ export function Figure({ store, atmosphere: a }: { store: WorldStore; atmosphere
     const speed = Math.hypot(s.vel.x, s.vel.z);
     const sn = Math.min(1, speed / 2);
     g.position.set(s.pos.x, 0, s.pos.z);
-    g.rotation.y = s.yaw;
+    g.rotation.y = s.bodyYaw;
     const t = clock.elapsedTime;
     // Gentle bob and a lean into the walk.
     if (body.current) {
@@ -67,12 +68,11 @@ export function Figure({ store, atmosphere: a }: { store: WorldStore; atmosphere
     if (capeMesh) {
       const pos = capeMesh.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < pos.count; i++) {
-        const x = restPositions[i * 3], y = restPositions[i * 3 + 1];
-        const down = -y / 0.95; // 0 at shoulders → 1 at the hem
-        const lift = trail.current * down * down * 0.75; // swing backward
-        const wave = s.reducedMotion ? 0 : Math.sin(t * (2 + sn * 4) - down * 5 + x * 6) * 0.05 * down * (0.4 + sn);
-        const flare = 1 + down * 0.6;
-        pos.setXYZ(i, x * flare, y + lift * 0.35, -lift - wave - down * 0.06);
+        const x = restPositions[i * 3], y = restPositions[i * 3 + 1], z = restPositions[i * 3 + 2];
+        const down = -y / CAPE_LEN; // 0 at shoulders → 1 at the hem
+        const lift = trail.current * down * down * 0.55; // swings back as she walks
+        const wave = s.reducedMotion ? 0 : Math.sin(t * (1.6 + sn * 4) - down * 5 + x * 7) * 0.035 * down * (0.5 + sn);
+        pos.setXYZ(i, x, y + lift * 0.3, z - lift - wave);
       }
       pos.needsUpdate = true;
       capeMesh.geometry.computeVertexNormals();
@@ -88,7 +88,7 @@ export function Figure({ store, atmosphere: a }: { store: WorldStore; atmosphere
       </mesh>
       <group ref={body} scale={1.12}>
         <mesh geometry={dress} material={dressMat} />
-        <mesh ref={cape} geometry={capeGeo} material={capeMat} position={[0, 0.95, -0.1]} />
+        <mesh ref={cape} geometry={capeGeo} material={capeMat} position={[0, 0.94, -0.015]} />
         <mesh material={skinMat} position={[0, 1.13, 0]}>
           <sphereGeometry args={[0.1, 32, 24]} />
         </mesh>

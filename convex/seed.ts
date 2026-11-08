@@ -1,5 +1,5 @@
 import { internalMutation } from "./_generated/server";
-import { buildBundledContent } from "../content";
+import { allProjects, buildBundledContent, projectShown } from "../content";
 import { MAIN_HALL_HIGHLIGHTS } from "../content/rooms";
 import { STATIC_ASSETS } from "../content/assets";
 
@@ -20,12 +20,15 @@ export const run = internalMutation({
     }
     const content = buildBundledContent();
 
-    for (const p of content.projects) {
+    // Projects not currently on display are kept as drafts (hidden from the site).
+    const drafts = allProjects().filter((p) => !projectShown(p));
+    for (const p of [...content.projects, ...drafts]) {
+      const shown = projectShown(p);
       const projectId = await ctx.db.insert("projects", {
         slug: p.slug, title: p.title, catalogName: p.catalogName, roomId: p.roomId,
         category: p.category, openness: p.openness, site: p.site, source: p.source,
         openingOrder: p.openingOrder, motif: p.motif, aliases: p.aliases, comingSoon: p.comingSoon,
-        status: "published", version: 1,
+        status: shown ? "published" : "draft", version: 1,
       });
       for (const locale of ["en", "ar"] as const) {
         await ctx.db.insert("projectTranslations", { projectId, locale, ...p.t[locale] });
@@ -53,6 +56,6 @@ export const run = internalMutation({
       featured: MAIN_HALL_HIGHLIGHTS,
       soundtrack: "generative-gallery-v1",
     });
-    return { projects: content.projects.length, exhibits: content.exhibits.length };
+    return { published: content.projects.length, drafts: drafts.length, exhibits: content.exhibits.length };
   },
 });
