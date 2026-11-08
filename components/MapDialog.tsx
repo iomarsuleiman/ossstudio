@@ -120,9 +120,13 @@ export function MapDialog({
                   <h3>{selectedRoom.t[locale].title}</h3>
                   <p className="muted">{selectedRoom.t[locale].subtitle}</p>
                 </div>
-                <button type="button" className="btn btn-primary" onClick={() => onRoom(selected)}>
-                  {selected === currentRoom ? ui.youAreHere : ui.goToRoom}
-                </button>
+                {selected === currentRoom ? (
+                  <p className="map-here-badge" role="status">◉ {ui.youAreHere}</p>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={() => onRoom(selected)}>
+                    {ui.goToRoom}
+                  </button>
+                )}
               </div>
             )}
             {list.length === 0 ? (

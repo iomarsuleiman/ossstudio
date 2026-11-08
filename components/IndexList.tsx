@@ -7,6 +7,7 @@ import { UI, dirOf } from "@/lib/i18n";
 import { normalise, searchProjects } from "@/lib/search";
 import { useCollection } from "@/lib/collection";
 import { CollectButton } from "./CollectButton";
+import { RoomFilterMenu } from "./RoomFilterMenu";
 import { CollectionShelf, Thumb } from "./CollectionShelf";
 import { GiftShop } from "./GiftShop";
 
@@ -52,7 +53,7 @@ export function IndexList({ content, locale }: { content: GalleryContent; locale
         </div>
         <div className="index-head-actions">
           <button type="button" className="btn" onClick={() => setShelf(true)}>✦ {ui.collectionButton(collected.length)}</button>
-          <Link className="btn" href={`/${other}/index`} lang={other}>{ui.language}</Link>
+          <Link className="btn" href={`/${other}/list`} lang={other}>{ui.language}</Link>
         </div>
       </header>
 
@@ -62,13 +63,15 @@ export function IndexList({ content, locale }: { content: GalleryContent; locale
           <input type="search" value={query} placeholder={ui.searchPlaceholder} aria-label={ui.search} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <div className="index-filters">
-          <label className="select">
-            <span>{ui.roomFilter}</span>
-            <select value={room} onChange={(e) => setRoom(e.target.value as RoomId | "all")}>
-              <option value="all">{ui.allRooms}</option>
-              {content.rooms.filter((r) => r.id !== "main").map((r) => <option key={r.id} value={r.id}>{r.t[locale].title}</option>)}
-            </select>
-          </label>
+          <RoomFilterMenu
+            label={ui.roomFilter}
+            value={room}
+            options={[
+              { value: "all", label: ui.allRooms },
+              ...content.rooms.filter((r) => r.id !== "main").map((r) => ({ value: r.id, label: r.t[locale].title })),
+            ]}
+            onChange={(v) => setRoom(v as RoomId | "all")}
+          />
           <div className="segmented" role="group" aria-label={ui.viewAll}>
             {([["all", ui.viewAll], ["featured", ui.viewFeatured], ["soon", ui.viewComingSoon], ["collected", ui.viewCollected]] as [View, string][]).map(([v, label]) => (
               <button key={v} type="button" className={view === v ? "is-on" : ""} aria-pressed={view === v} onClick={() => setView(v)}>{label}</button>

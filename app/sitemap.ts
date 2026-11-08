@@ -6,7 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const { rooms, projects } = buildBundledContent();
   return LOCALES.flatMap((l) => [
     { url: `${base}/${l}` },
-    { url: `${base}/${l}/index` },
+    { url: `${base}/${l}/list` },
     ...rooms.filter((r) => r.id !== "main").map((r) => ({ url: `${base}/${l}/room/${r.id}` })),
     ...projects.map((p) => ({ url: `${base}/${l}/exhibit/${p.slug}` })),
   ]);

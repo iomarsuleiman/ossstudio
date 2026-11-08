@@ -3,7 +3,7 @@ import GalleryApp from "@/components/GalleryApp";
 import { getContent } from "@/lib/content";
 import { isLocale } from "@/lib/i18n";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default async function GalleryPage({
   params, searchParams,

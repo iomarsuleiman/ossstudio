@@ -15,7 +15,7 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 - **The $0.00 Gift Shop**: "Add to Collection" on every artwork (button, or the C key). It's also on exhibit pages and in the index. My Collection lets you reorder, deselect, remove, clear and teleport back to a piece. **Check out — $0.00** unrolls a printable receipt (Subtotal, Tax and Total all $0.00, "Paid in curiosity"). **Download collection** builds a ZIP in the browser containing `artworks/*.png` (high-resolution framed paintings, transparent outside the frame), `collection.md`, `collection.csv`, `receipt.html` and `licenses-and-credits.txt`. There is no account, payment or server: only item IDs are stored, in versioned localStorage, and the count stays in sync across tabs.
 - **Linux Distributions** section in Behind the Scenes, under its own arch (Fedora, Arch, Mint, Debian, Ubuntu).
 - **Map + teleport + search** (English and Arabic, diacritic-insensitive) to any room or project.
-- **Accessible index** at `/{locale}/index`: every project as a plain list, never 3D-only. It has search with aliases (e.g. "drawio", "winutil", "7zip") and small-typo tolerance, an A–Z jump bar, room filter, All / Opening Collection / Coming soon / My collection views, Clear filters, thumbnails painted only when they scroll into view, and collect buttons.
+- **Accessible index** at `/{locale}/list`: every project as a plain list, never 3D-only. It has search with aliases (e.g. "drawio", "winutil", "7zip") and small-typo tolerance, an A–Z jump bar, room filter, All / Opening Collection / Coming soon / My collection views, Clear filters, thumbnails painted only when they scroll into view, and collect buttons.
 - **Optional side view** (phones and tablets): a GRIS-style side-on camera following an original cloaked figure. The near side is cut away like a stage set, and the camera swings round when you cross the path. Switch with "Side view / First person" in the top bar; your choice is remembered.
 - **English / Arabic** with proper RTL. Switching language keeps your room, position and open exhibit.
 - **Shareable URLs**: `/{en|ar}`, `/{en|ar}/room/{room}`, `/{en|ar}/exhibit/{slug}`, `/{en|ar}?at={slug}`.
@@ -111,3 +111,4 @@ Add `?debug` to any gallery URL to expose `window.__gallery` (world state), whic
 - Recorded or licensed music. The current soundtrack is generative.
 - A Figma design system and playtest-tuned movement and camera values.
 - Native-speaker review of the Arabic copy, plus a final link and licence check.
+

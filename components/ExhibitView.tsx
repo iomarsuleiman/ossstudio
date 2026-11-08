@@ -50,6 +50,7 @@ export function ExhibitView({
       <div className="exhibit-top">
         <button type="button" className="btn btn-quiet" onClick={onBack}>
           <span aria-hidden="true" className="flip-rtl">←</span> {ui.backToGallery}
+          <span className="kbd esc-kbd" aria-hidden="true">Esc</span>
         </button>
         <p className="exhibit-room">
           {ui.foundIn}{" "}

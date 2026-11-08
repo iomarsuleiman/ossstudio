@@ -355,7 +355,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const typing = (el: EventTarget | null) => el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (openSlug) { if (e.key === "Escape") { e.preventDefault(); closeExhibit(); } return; }
+      if (openSlug) { if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); closeExhibit(); } return; }
       if (mapOpen || shelfOpen || checkout || !entered) return;
       const move = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
@@ -429,7 +429,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       const other = locale === "en" ? "ar" : "en";
       queue.add([
         ...STATIC_ASSETS.map((a) => ({ key: `asset:${a.key}`, group: "assets" as const, priority: a.priority, run: () => fetch(a.url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); }) })),
-        { key: "route:index", group: "routes", priority: 1, run: async () => router.prefetch(`/${locale}/index`) },
+        { key: "route:index", group: "routes", priority: 1, run: async () => router.prefetch(`/${locale}/list`) },
         { key: "route:locale", group: "routes", priority: 1, run: async () => router.prefetch(`/${other}`) },
         ...content.projects.map((p) => {
           const home = roomFor(content, p);
@@ -447,7 +447,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
 
   return (
     <div className="gallery" dir={dirOf(locale)} data-reduced={reduced || undefined}>
-      <a className="skip-link" href={`/${locale}/index`}>{ui.skipToIndex}</a>
+      <a className="skip-link" href={`/${locale}/list`}>{ui.skipToIndex}</a>
 
       <div className="world" aria-hidden={!!openSlug}>
         {webgl ? (
@@ -464,7 +464,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         ) : (
           <div className="no-webgl">
             <p>{ui.noWebgl}</p>
-            <Link className="btn btn-primary" href={`/${locale}/index`}>{ui.index}</Link>
+            <Link className="btn btn-primary" href={`/${locale}/list`}>{ui.index}</Link>
           </div>
         )}
       </div>
@@ -511,7 +511,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
                 {view === "side" ? ui.viewFirst : ui.viewSide}
               </button>
             )}
-            <Link className="btn btn-glass" href={`/${locale}/index`}>{ui.index}</Link>
+            <Link className="btn btn-glass" href={`/${locale}/list`}>{ui.index}</Link>
           </nav>
         </header>
       )}
@@ -601,7 +601,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <p className="arrival-meta muted">
               {ready ? (touch ? ui.controlsTouch : ui.controlsDesktop) : ui.loadingWorld}
             </p>
-            <Link className="link small" href={`/${locale}/index`}>{ui.index}</Link>
+            <Link className="link small" href={`/${locale}/list`}>{ui.index}</Link>
           </div>
         </div>
       )}
