@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GalleryContent, Locale, Project, RoomId } from "@/content";
 import { UI } from "@/lib/i18n";
 import { searchProjects } from "@/lib/search";
+import { ATMOSPHERE } from "./world/atmosphere";
 
 export function MapDialog({
   content, locale, currentRoom, onClose, onRoom, onProject,
@@ -81,30 +82,36 @@ export function MapDialog({
         </label>
 
         <div className="map-body">
-          <svg className="map-svg" viewBox="0 0 100 100" role="group" aria-label={ui.mapTitle}>
-            {content.rooms.filter((r) => r.id !== "main").map((r) => (
-              <line key={r.id} x1={main.map.x} y1={main.map.y} x2={r.map.x} y2={r.map.y} className="map-path" />
-            ))}
+          <div className="map-canvas" role="group" aria-label={ui.mapTitle}>
+            <svg className="map-paths" viewBox="-12.5 -12.5 125 125" preserveAspectRatio="none" aria-hidden="true">
+              {content.rooms.filter((r) => r.id !== "main").map((r) => (
+                <path
+                  key={r.id}
+                  d={`M ${main.map.x} ${main.map.y} Q ${(main.map.x + r.map.x) / 2 + 4} ${(main.map.y + r.map.y) / 2} ${r.map.x} ${r.map.y}`}
+                  className="map-path"
+                />
+              ))}
+            </svg>
             {content.rooms.map((r) => {
-              const isMain = r.id === "main";
-              const w = isMain ? 26 : 25, h = isMain ? 14 : 11;
+              const a = ATMOSPHERE[r.id];
               const here = r.id === currentRoom;
               return (
-                <g
+                <button
                   key={r.id}
-                  transform={`translate(${r.map.x - w / 2} ${r.map.y - h / 2})`}
-                  className={`map-room${selected === r.id ? " is-selected" : ""}${here ? " is-here" : ""}`}
+                  type="button"
+                  className={`map-node${r.id === "main" ? " is-main" : ""}${selected === r.id ? " is-selected" : ""}${here ? " is-here" : ""}`}
+                  style={{ left: `${10 + r.map.x * 0.8}%`, top: `${10 + r.map.y * 0.8}%`, ["--zenith" as string]: a.zenith, ["--glow" as string]: a.glow }}
                   onClick={() => { setQuery(""); setSelected(r.id); }}
+                  onDoubleClick={() => onRoom(r.id)}
+                  aria-pressed={selected === r.id}
                 >
-                  <rect width={w} height={h} rx={3} style={{ fill: r.palette.wall, stroke: r.palette.accent }} />
-                  <foreignObject width={w} height={h}>
-                    <div className="map-room-label">{r.t[locale].title}</div>
-                  </foreignObject>
-                  {here && <circle cx={w - 2.5} cy={2.5} r={1.4} className="map-here" />}
-                </g>
+                  <span className="map-node-orb" aria-hidden="true" />
+                  <span className="map-node-label">{r.t[locale].title}</span>
+                  {here && <span className="map-node-here">{ui.youAreHere}</span>}
+                </button>
               );
             })}
-          </svg>
+          </div>
 
           <div className="map-list">
             {!results && (
@@ -116,23 +123,6 @@ export function MapDialog({
                 <button type="button" className="btn btn-primary" onClick={() => onRoom(selected)}>
                   {selected === currentRoom ? ui.youAreHere : ui.goToRoom}
                 </button>
-              </div>
-            )}
-            {/* Room buttons are also offered as a plain list for keyboard and screen readers. */}
-            {!results && (
-              <div className="room-chips" role="list">
-                {content.rooms.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    role="listitem"
-                    className={`chip${selected === r.id ? " is-on" : ""}`}
-                    aria-pressed={selected === r.id}
-                    onClick={() => setSelected(r.id)}
-                  >
-                    {r.t[locale].title}
-                  </button>
-                ))}
               </div>
             )}
             {list.length === 0 ? (

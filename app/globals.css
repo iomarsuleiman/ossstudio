@@ -220,23 +220,34 @@ button { font: inherit; color: inherit; }
   border: 1px solid var(--line); background: var(--cream); font: inherit; font-size: 1rem; color: var(--ink);
 }
 .map-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--s5); }
-.map-svg { width: 100%; height: auto; max-height: 460px; }
-.map-path { stroke: rgba(61, 55, 55, 0.25); stroke-width: 0.5; stroke-dasharray: 1 1.4; }
-.map-room { cursor: pointer; }
-.map-room rect { stroke-width: 0.5; transition: stroke-width 150ms; }
-.map-room-label {
-  display: grid; place-items: center; width: 100%; height: 100%; padding: 0 1px;
-  font-size: 2.3px; line-height: 1.15; font-weight: 700; text-align: center; color: var(--ink);
+.map-canvas {
+  position: relative; width: 100%; aspect-ratio: 1; max-height: 480px; margin-inline: auto;
+  border-radius: 50%; background: radial-gradient(circle, #fbf3e7 0%, #f1e2d2 70%, rgba(241, 226, 210, 0) 72%);
 }
-.map-room.is-selected rect { stroke-width: 1.2; }
-.map-here { fill: var(--burgundy); }
+.map-paths { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-path { fill: none; stroke: rgba(120, 80, 80, 0.32); stroke-width: 0.6; stroke-dasharray: 0.4 2.2; stroke-linecap: round; }
+.map-node {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  width: 7.2em; padding: 4px; border: 0; background: none; cursor: pointer; text-align: center;
+  font-size: clamp(0.62rem, 1.6vw, 0.82rem); line-height: 1.15; color: var(--ink);
+}
+.map-node.is-main { width: 8em; }
+.map-node-orb {
+  width: 2.6em; height: 2.6em; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--glow), var(--zenith) 60%, transparent 72%);
+  box-shadow: 0 0 0 0 var(--zenith); transition: transform 250ms var(--ease), box-shadow 250ms var(--ease);
+}
+.map-node.is-main .map-node-orb { width: 3.2em; height: 3.2em; }
+.map-node-label { font-weight: 700; overflow-wrap: anywhere; hyphens: auto; }
+.map-node-here { font-size: 0.85em; color: var(--burgundy); font-weight: 600; }
+.map-node:hover .map-node-orb, .map-node.is-selected .map-node-orb { transform: scale(1.15); box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.7); }
+.map-node.is-selected .map-node-label { color: var(--wine); text-decoration: underline; text-underline-offset: 3px; }
 .map-list { min-width: 0; }
 .map-room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s3); }
 .map-room-head h3 { margin: 0; font-family: var(--font-head); font-size: 1.5rem; }
 .map-room-head p { margin: 0; }
-.room-chips { display: flex; flex-wrap: wrap; gap: var(--s1); margin: var(--s3) 0; }
-.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; cursor: pointer; min-height: 32px; }
-.chip.is-on { background: var(--charcoal); color: var(--cream); }
+.map-room-head { margin-bottom: var(--s3); }
 .project-list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
 .project-row {
   display: flex; align-items: center; gap: var(--s3); width: 100%; text-align: start;
@@ -263,7 +274,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 860px) {
   .exhibit-grid, .map-body { grid-template-columns: 1fr; }
   .exhibit { padding: var(--s4); }
-  .map-svg { max-height: 260px; }
+  .map-canvas { max-width: 380px; }
 }
 @media (max-width: 640px) {
   .hud-top { flex-direction: column; align-items: stretch; padding: var(--s3); }
@@ -281,3 +292,84 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; }
 }
+
+/* --- Touch joystick -------------------------------------------------------------- */
+.joystick {
+  position: absolute; z-index: 11; bottom: calc(var(--s6) + env(safe-area-inset-bottom)); inset-inline-start: var(--s5);
+  width: 120px; height: 120px; border-radius: 50%; touch-action: none;
+  background: radial-gradient(circle, rgba(255, 250, 240, 0.25), rgba(255, 250, 240, 0.5));
+  border: 1.5px solid rgba(255, 250, 240, 0.85); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: grid; place-items: center;
+}
+.joystick-knob {
+  width: 52px; height: 52px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 40% 35%, #fffaf2, #e9cfc6); box-shadow: 0 6px 18px rgba(94, 40, 54, 0.25);
+  transition: transform 120ms ease-out;
+}
+@media (pointer: coarse) { .hud-bottom { padding-bottom: 170px; } }
+
+/* --- Teleport veil (animated with React <ViewTransition>) -------------------------- */
+.teleport-veil {
+  position: fixed; inset: 0; z-index: 35; overflow: hidden; pointer-events: auto;
+  display: grid; place-items: center; text-align: center;
+  background:
+    radial-gradient(ellipse at 50% 120%, var(--glow) 0%, transparent 55%),
+    linear-gradient(180deg, var(--zenith) 0%, var(--horizon) 62%, var(--glow) 100%);
+}
+.teleport-veil::after { content: ""; position: absolute; inset: 0; background: url("/textures/paper.svg"); mix-blend-mode: multiply; opacity: 0.55; pointer-events: none; }
+.veil-sun {
+  position: absolute; width: 38vmin; height: 38vmin; border-radius: 50%; top: 18%; left: 50%; translate: -50% 0;
+  background: radial-gradient(circle, #fffaf0 0%, var(--glow) 45%, transparent 70%); opacity: 0.9;
+  animation: veil-breathe 6s ease-in-out infinite;
+}
+.veil-hills {
+  position: absolute; inset: auto -10% -2% -10%; height: 34%;
+  background:
+    radial-gradient(60% 90% at 25% 100%, var(--deep) 0 60%, transparent 61%),
+    radial-gradient(55% 80% at 70% 100%, color-mix(in srgb, var(--deep) 75%, var(--horizon)) 0 60%, transparent 61%),
+    radial-gradient(80% 60% at 50% 110%, color-mix(in srgb, var(--deep) 55%, var(--horizon)) 0 60%, transparent 61%);
+  opacity: 0.85;
+}
+.veil-petals span {
+  position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #fffaf2; opacity: 0.8;
+  left: calc(6% + var(--i) * 6.5%); top: 110%;
+  animation: veil-petal calc(5s + var(--i) * 0.37s) linear infinite; animation-delay: calc(var(--i) * -0.6s);
+}
+.veil-text { position: relative; z-index: 1; padding: var(--s5); max-width: 720px; }
+.veil-eyebrow { margin: 0; letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.8rem; font-weight: 700; color: rgba(61, 40, 44, 0.7); }
+[dir="rtl"] .veil-eyebrow { letter-spacing: 0; text-transform: none; font-size: 1rem; }
+.veil-title { margin: var(--s2) 0; font-family: var(--font-head); font-weight: 600; font-size: clamp(2.6rem, 9vw, 5.6rem); line-height: 1; color: #4a2a33; }
+.veil-sub { margin: 0 auto; max-width: 34ch; font-size: 1.1rem; color: rgba(61, 40, 44, 0.8); }
+.veil-stroke { width: min(360px, 70vw); height: 24px; margin-top: var(--s4); }
+.veil-stroke path { fill: none; stroke: #4a2a33; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 420; stroke-dashoffset: 420; animation: veil-draw 1.4s 0.5s var(--ease) forwards; opacity: 0.6; }
+@keyframes veil-draw { to { stroke-dashoffset: 0; } }
+@keyframes veil-breathe { 50% { transform: scale(1.06); opacity: 1; } }
+@keyframes veil-petal {
+  from { transform: translate(0, 0) rotate(0); }
+  to { transform: translate(40px, -125vh) rotate(260deg); }
+}
+
+/* The world stays still under the veil; only the veil animates. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(.veil-in), ::view-transition-group(.veil-out) { z-index: 50; }
+::view-transition-new(.veil-in) { animation: veil-wipe-in 950ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+::view-transition-old(.veil-out) { animation: veil-wipe-out 1000ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+@keyframes veil-wipe-in {
+  0% { clip-path: circle(0% at 50% 85%); filter: blur(12px) saturate(1.3); }
+  60% { filter: blur(2px); }
+  100% { clip-path: circle(150% at 50% 85%); filter: none; }
+}
+@keyframes veil-wipe-out {
+  0% { clip-path: inset(0 0 0 0); opacity: 1; transform: none; }
+  100% { clip-path: inset(0 0 100% 0); opacity: 0.6; transform: translateY(-6%) scale(1.03); }
+}
+/* Browsers without View Transitions get the same motion as CSS animations. */
+.teleport-veil.is-css-in { animation: veil-wipe-in 950ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+.teleport-veil.is-css-out { animation: veil-wipe-out 950ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(.veil-in), ::view-transition-old(.veil-out) { animation: veil-fade 240ms linear both; }
+  ::view-transition-old(.veil-out) { animation-direction: reverse; }
+  .veil-petals, .veil-stroke { display: none; }
+}
+@keyframes veil-fade { from { opacity: 0; } to { opacity: 1; } }

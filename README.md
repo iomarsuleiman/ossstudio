@@ -6,10 +6,11 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 
 ## What's in it
 
-- **Real-time 3D gallery** (React Three Fiber / Three.js): a Main Hall plus 8 visitor-friendly rooms, arched doorways you walk through, light shafts, benches, cypresses.
-- **Walking only**: kinematic controller (≈1.9 m/s, eased start/stop/turn, wall sliding, prop collisions). No running, jumping or physics engine. WASD/arrows on desktop; tap-to-move on touch.
-- **Cinematic camera**: high three-quarter follow camera that gently frames an artwork when you pause near it.
-- **Step into an artwork**: the camera dollies into the frame, a painterly ink wash covers the screen, and a readable bilingual exhibit page appears. Esc / Back reverses it and you're exactly where you were.
+- **A painted 3D world** (React Three Fiber / Three.js): a Main Hall plus 8 rooms. Each is an open-air walkway over still water under a watercolour sky, in one colour per room. Arches span the path, artworks hang on arched panels, and monuments, hills and drifting petals fade into the mist beyond. Surfaces use unlit gradient "paint" shaders (`components/world/paint.ts`), so nothing looks faceted.
+- **First person, with gentle movement**: you ease into a walk and glide to a stop, turns are smoothed, and the view sways and leans slightly. Walking only: no running, jumping or physics engine. Desktop: W A S D to move, drag to look, arrow keys to turn. Touch: a soft joystick to walk and drag anywhere else to look. Tap an artwork to glide up to it, or tap the floor to drift there.
+- **Entrance map**: a large painted map on a pedestal in the Main Hall. Touch a glowing orb to travel to that room, or open the full map.
+- **Full-screen teleport**: travelling between rooms (map, entrance map or a doorway) sweeps a painted "Travelling to…" veil across the whole screen, animated with React 19's `<ViewTransition>`. Browsers without the View Transitions API get the same motion as plain CSS.
+- **Step into an artwork**: look at it and press E (or tap it). The camera moves into the frame, a painterly ink wash covers the screen, and a readable bilingual exhibit page appears. Esc / Back reverses it and you're exactly where you were.
 - **166 artworks**, all procedurally painted (original art, no logos). The 36 Opening Collection pieces have bespoke motifs; 12 also have small animated sculptures (chess table, rotating sculpture, floating letters, LED circuit board…).
 - **Map + teleport + search** (English and Arabic, diacritic-insensitive) to any room or project.
 - **Accessible index** at `/{locale}/index`: every project as a plain list, never 3D-only.
@@ -17,7 +18,7 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 - **Shareable URLs**: `/{en|ar}`, `/{en|ar}/room/{room}`, `/{en|ar}/exhibit/{slug}`, `/{en|ar}?at={slug}`.
 - **Sound**: original generative ambience (soft pads, sparse piano, room reverb, footsteps, paper sweeps) made with Web Audio. Silent until you choose "Enter with sound". It fades out when the tab is hidden.
 - **Full-site prefetch**: once the entrance is interactive, a queue (capped concurrency, retries, re-prioritised on teleport) prepares every artwork and route chunk. It respects Save-Data and slow connections, and progress is shown truthfully ("42 of 166 artworks ready").
-- **Reduced motion**: fades instead of sweeps, no camera swings, still sculptures.
+- **Reduced motion**: fades instead of sweeps, no sway or lean, still sculptures and petals.
 
 ## Stack
 
@@ -86,7 +87,8 @@ convex/           schema, seed, read queries, protected editor mutation
 app/[locale]/     gallery, room, exhibit and index routes
 components/
   GalleryApp.tsx  Orchestrates world, transitions, exhibit overlay, map, audio, prefetch
-  world/          RoomScene (architecture), Artwork, Installation, Visitor (movement + camera)
+  world/          RoomScene (painted world), EntranceMap, Artwork, Installation,
+                  FirstPerson (movement + camera), paint.ts (shaders), shapes.ts (soft geometry)
 lib/
   painter.ts      Procedural painterly artworks, signs and surfaces
   audio.ts        Generative ambience and sound effects
@@ -97,7 +99,8 @@ Add `?debug` to any gallery URL to expose `window.__gallery` (world state), whic
 
 ## Not done yet (later plan stages)
 
-- Blender-authored GLB scenes and a rigged character. The current world is built from code-generated geometry in the same palette.
+- Blender-authored GLB scenes. The current world is built from code-generated geometry and shaders.
+- Movement feel tuned with real playtests. The current values are first guesses.
 - Recorded or licensed music. The current soundtrack is generative.
 - A Figma design system and playtest-tuned movement and camera values.
 - Native-speaker review of the Arabic copy, plus a final link and licence check.

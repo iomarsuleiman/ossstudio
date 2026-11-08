@@ -7,8 +7,18 @@ export type WorldMode = "arrival" | "walk" | "entering" | "exhibit" | "exiting" 
 export interface WorldStore {
   roomId: RoomId;
   pos: { x: number; z: number };
+  /** Where the visitor is facing (forward = (sin yaw, cos yaw)). */
   yaw: number;
+  /** Look up/down, radians. */
+  pitch: number;
+  /** Smoothed look targets driven by drag, arrow keys and glides. */
+  targetYaw: number;
+  targetPitch: number;
   vel: { x: number; z: number };
+  /** Virtual joystick on touch screens, each axis in [-1, 1]. */
+  joy: { x: number; y: number };
+  /** Standing by the entrance map. */
+  nearMap: boolean;
   keys: Set<string>;
   /** Tap/click-to-move destination. */
   target: { x: number; z: number } | null;
@@ -29,6 +39,7 @@ export interface WorldStore {
   onDoor?: (d: DoorPlacement) => void;
   onStep?: () => void;
   onArrive?: (e: ExhibitPlacement) => void;
+  onNearMap?: (near: boolean) => void;
 }
 
 export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, yaw: number): WorldStore {
@@ -36,7 +47,12 @@ export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, 
     roomId,
     pos: { ...pos },
     yaw,
+    pitch: 0,
+    targetYaw: yaw,
+    targetPitch: 0,
     vel: { x: 0, z: 0 },
+    joy: { x: 0, y: 0 },
+    nearMap: false,
     keys: new Set(),
     target: null,
     targetExhibit: null,

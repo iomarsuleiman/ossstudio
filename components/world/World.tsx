@@ -5,10 +5,10 @@ import * as THREE from "three";
 import type { GalleryContent, Locale, RoomId } from "@/content";
 import type { WorldStore } from "@/lib/worldStore";
 import { RoomScene } from "./RoomScene";
-import { Visitor } from "./Visitor";
+import { FirstPerson } from "./FirstPerson";
 
 export default function World({
-  content, locale, roomId, store, onReady, onExhibitClick, onFloorClick,
+  content, locale, roomId, store, onReady, onExhibitClick, onFloorClick, onMapRoom,
 }: {
   content: GalleryContent;
   locale: Locale;
@@ -17,17 +17,18 @@ export default function World({
   onReady: () => void;
   onExhibitClick: (id: string) => void;
   onFloorClick: (x: number, z: number) => void;
+  onMapRoom: (id: RoomId) => void;
 }) {
   const room = content.rooms.find((r) => r.id === roomId)!;
   return (
     <Canvas
       className="world-canvas"
       dpr={[1, 1.75]}
-      camera={{ fov: 45, near: 0.1, far: 90, position: [0, 3, 8] }}
+      camera={{ fov: 62, near: 0.05, far: 400, position: [0, 1.62, 8] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
-        gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.05;
+        // Flat, true-to-paint colour: no filmic tone mapping.
+        gl.toneMapping = THREE.NoToneMapping;
         requestAnimationFrame(() => onReady());
       }}
       aria-hidden="true"
@@ -40,8 +41,9 @@ export default function World({
           store={store}
           onExhibitClick={onExhibitClick}
           onFloorClick={onFloorClick}
+          onMapRoom={onMapRoom}
         />
-        <Visitor content={content} room={room} store={store} />
+        <FirstPerson content={content} room={room} store={store} />
       </group>
     </Canvas>
   );

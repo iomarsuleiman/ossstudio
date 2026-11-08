@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ViewTransition, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DoorPlacement, ExhibitPlacement, GalleryContent, Locale, RoomId } from "@/content";
 import { arrivalFor } from "@/content/layout";
 import { STATIC_ASSETS } from "@/content/assets";
@@ -15,6 +15,8 @@ import { createWorldStore, loadVisit, saveVisit, type WorldStore } from "@/lib/w
 import { dominantColor } from "@/lib/painter";
 import { ExhibitView } from "./ExhibitView";
 import { MapDialog } from "./MapDialog";
+import { Joystick } from "./Joystick";
+import { ATMOSPHERE } from "./world/atmosphere";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
 
@@ -25,6 +27,17 @@ export interface InitialView {
 }
 
 type Wash = { phase: "idle" | "in" | "out"; kind: "ink" | "sweep"; color: string };
+/** Full-screen teleport veil. `leaving` is only used where View Transitions are unsupported. */
+type Veil = { to: RoomId; leaving?: boolean };
+
+const supportsViewTransitions = () => typeof document !== "undefined" && "startViewTransition" in document;
+
+/** Facing direction from a spot toward an artwork (forward = (sin yaw, cos yaw)). */
+function yawToward(from: { x: number; z: number }, e: ExhibitPlacement) {
+  const off = e.kind === "pedestal" ? 0.35 : 0;
+  const cx = e.x + Math.sin(e.rotY) * off, cz = e.z + Math.cos(e.rotY) * off;
+  return Math.atan2(cx - from.x, cz - from.z);
+}
 
 let queue: PrefetchQueue | null = null; // one per visit, survives language switches
 
@@ -96,6 +109,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const [touch, setTouch] = useState(false);
   const [prefetch, setPrefetch] = useState<PrefetchState | null>(null);
   const [hint, setHint] = useState(false);
+  const [veil, setVeil] = useState<Veil | null>(null);
+  const [nearMap, setNearMap] = useState(false);
   const pushed = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const timers = useRef<number[]>([]);
@@ -136,34 +151,47 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   // --- transitions ------------------------------------------------------------------
   const T = reduced ? { cover: 200, settle: 150, enter: 260, panel: 300 } : { cover: 700, settle: 450, enter: 560, panel: 1000 };
 
+  // Full-screen teleport: a painted veil sweeps in (React <ViewTransition>),
+  // the world changes behind it, then it sweeps away.
   const teleport = useCallback((to: RoomId, pos: { x: number; z: number; yaw: number }) => {
     setMapOpen(false);
     store.mode = "transition";
     store.target = null;
+    store.keys.clear();
+    store.joy = { x: 0, y: 0 };
     audio.sweep();
-    setWash({ phase: "in", kind: "sweep", color: dominantColor(content.rooms.find((r) => r.id === to)!) });
     queue?.prioritise((t) => t.key.startsWith(`art:${to}:`));
+    const vt = supportsViewTransitions();
+    startTransition(() => setVeil({ to }));
+    const cover = reduced ? 250 : 950;
+    const hold = reduced ? 250 : 900;
     later(() => {
       store.roomId = to;
       store.pos = { x: pos.x, z: pos.z };
-      store.yaw = pos.yaw;
+      store.yaw = store.targetYaw = pos.yaw;
+      store.pitch = store.targetPitch = 0;
       store.vel = { x: 0, z: 0 };
       store.nearby = null;
+      store.nearMap = false;
       store.entering = null;
       store.enter = 0;
       store.snapCamera = true;
       setNearby(null);
+      setNearMap(false);
       setRoomId(to);
       window.history.replaceState(null, "", roomPath(locale, to));
       later(() => {
-        setWash((w) => ({ ...w, phase: "out" }));
+        if (vt) startTransition(() => setVeil(null));
+        else {
+          setVeil({ to, leaving: true });
+          later(() => setVeil(null), cover);
+        }
         store.mode = "walk";
         persist();
-        later(() => setWash((w) => ({ ...w, phase: "idle" })), T.cover);
-      }, T.settle);
-    }, T.cover);
+      }, hold);
+    }, cover);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, audio, content, locale, persist, reduced]);
+  }, [store, audio, locale, persist, reduced]);
 
   const teleportToProject = useCallback((slug: string) => {
     const e = realExhibit(content, slug);
@@ -231,7 +259,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       else if (m && !openSlug) {
         const e = realExhibit(content, m[1]);
         if (!e) return;
-        store.roomId = e.roomId; store.pos = { x: e.spawn.x, z: e.spawn.z }; store.yaw = e.spawn.yaw;
+        store.roomId = e.roomId; store.pos = { x: e.spawn.x, z: e.spawn.z }; store.yaw = store.targetYaw = e.spawn.yaw;
         store.entering = e; store.enter = 1; store.mode = "exhibit"; store.snapCamera = true;
         setRoomId(e.roomId);
         setEntered(true);
@@ -252,14 +280,21 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     store.onNearby = (e) => { setNearby(e); if (e) audio.chime(); };
     store.onDoor = onDoor;
     store.onStep = () => audio.footstep();
+    store.onNearMap = (near) => setNearMap(near);
   }, [store, audio, onDoor]);
 
   const onExhibitClick = useCallback((id: string) => {
     const e = content.exhibits.find((x) => x.id === id);
     if (!e || store.mode !== "walk") return;
-    const close = Math.hypot(e.spawn.x - store.pos.x, e.spawn.z - store.pos.z) < 1.9;
+    const close = store.nearby?.id === e.id || Math.hypot(e.spawn.x - store.pos.x, e.spawn.z - store.pos.z) < 1.2;
     if (close) openExhibit(e);
-    else { store.target = { x: e.spawn.x, z: e.spawn.z }; store.targetExhibit = e.id; }
+    else {
+      // Glide to the viewing spot, turning gracefully to face the artwork.
+      store.target = { x: e.spawn.x, z: e.spawn.z };
+      store.targetExhibit = e.id;
+      store.targetYaw = yawToward(e.spawn, e);
+      store.targetPitch = 0;
+    }
   }, [content, store, openExhibit]);
 
   const onFloorClick = useCallback((x: number, z: number) => {
@@ -270,6 +305,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       const out = { left: [-1, 0], right: [1, 0], front: [0, -1], back: [0, 1] }[d.side];
       store.target = { x: d.x + out[0], z: d.z + out[1] };
     } else store.target = { x, z };
+    store.targetYaw = Math.atan2(store.target.x - store.pos.x, store.target.z - store.pos.z);
   }, [content, store]);
 
   // --- keyboard -------------------------------------------------------------------------
@@ -283,7 +319,10 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
       if (e.code === "KeyM") { e.preventDefault(); setMapOpen(true); return; }
       const onButton = e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement;
-      if ((e.code === "KeyE" || (e.key === "Enter" && !onButton)) && store.nearby) { e.preventDefault(); openExhibit(store.nearby); }
+      if (e.code === "KeyE" || (e.key === "Enter" && !onButton)) {
+        if (store.nearby) { e.preventDefault(); openExhibit(store.nearby); }
+        else if (store.nearMap) { e.preventDefault(); setMapOpen(true); }
+      }
     };
     const up = (e: KeyboardEvent) => store.keys.delete(e.code);
     const blur = () => store.keys.clear();
@@ -295,8 +334,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
 
   useEffect(() => {
     if (mapOpen) { store.keys.clear(); if (store.mode === "walk") store.mode = "transition"; }
-    else if (store.mode === "transition" && wash.phase === "idle" && entered && !openSlug) store.mode = "walk";
-  }, [mapOpen, store, wash.phase, entered, openSlug]);
+    else if (store.mode === "transition" && wash.phase === "idle" && !veil && entered && !openSlug) store.mode = "walk";
+  }, [mapOpen, store, wash.phase, veil, entered, openSlug]);
 
   // --- entering the gallery -----------------------------------------------------------
   const enterGallery = async (withSound: boolean) => {
@@ -359,6 +398,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             onReady={() => setReady(true)}
             onExhibitClick={onExhibitClick}
             onFloorClick={onFloorClick}
+            onMapRoom={teleportToRoom}
           />
         ) : (
           <div className="no-webgl">
@@ -410,6 +450,16 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       {showHud && (
         <div className="hud-bottom">
           <div className="nearby" aria-live="polite">
+            {!nearbyProject && nearMap && (
+              <div className="nearby-card" key="map">
+                <p className="nearby-title">{ui.mapTitle}</p>
+                <p className="nearby-line">{ui.entranceMapHint}</p>
+                <button type="button" className="btn btn-primary" onClick={() => setMapOpen(true)} aria-keyshortcuts="E">
+                  {ui.openMap}
+                  {!touch && <span className="kbd" aria-hidden="true">E</span>}
+                </button>
+              </div>
+            )}
             {nearbyProject && nearby && (
               <div className="nearby-card" key={nearby.id}>
                 <p className="nearby-title"><bdi>{nearbyProject.title}</bdi></p>
@@ -426,6 +476,33 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
           )}
         </div>
       )}
+
+      {showHud && touch && !mapOpen && <Joystick store={store} label={ui.joystick} />}
+
+      {veil && (() => {
+        const dest = content.rooms.find((r) => r.id === veil.to)!;
+        const a = ATMOSPHERE[veil.to];
+        return (
+          <ViewTransition enter="veil-in" exit="veil-out">
+            <div
+              className={`teleport-veil${!supportsViewTransitions() ? (veil.leaving ? " is-css-out" : " is-css-in") : ""}`}
+              style={{ ["--zenith" as string]: a.zenith, ["--horizon" as string]: a.horizon, ["--glow" as string]: a.glow, ["--deep" as string]: a.monument }}
+              role="status"
+              aria-live="polite"
+            >
+              <div className="veil-sun" aria-hidden="true" />
+              <div className="veil-hills" aria-hidden="true" />
+              <div className="veil-petals" aria-hidden="true">{Array.from({ length: 14 }, (_, i) => <span key={i} style={{ ["--i" as string]: i }} />)}</div>
+              <div className="veil-text">
+                <p className="veil-eyebrow">{ui.travellingTo}</p>
+                <p className="veil-title">{dest.t[locale].title}</p>
+                <p className="veil-sub">{dest.t[locale].subtitle}</p>
+                <svg className="veil-stroke" viewBox="0 0 400 24" aria-hidden="true"><path d="M8 14 C 90 2, 180 22, 260 10 S 370 8, 392 12" /></svg>
+              </div>
+            </div>
+          </ViewTransition>
+        );
+      })()}
 
       {prefetch && entered && !openSlug && !(prefetch.finished && !hint) && (
         <p className="prefetch" aria-live="off">

@@ -7,6 +7,8 @@ import type { ExhibitPlacement, GalleryContent, Project } from "@/content";
 import { artworkUrl, roomFor } from "@/lib/artworks";
 import { paintPlaque } from "@/lib/painter";
 import type { WorldStore } from "@/lib/worldStore";
+import { mix, paintMaterial, type Atmosphere } from "./paint";
+import { frameGeometry, steleGeometry } from "./shapes";
 
 const loader = new THREE.TextureLoader();
 
@@ -28,12 +30,13 @@ function getGlow() {
 }
 
 export function Artwork({
-  exhibit, project, content, store, onClick,
+  exhibit, project, content, store, atmosphere, onClick,
 }: {
   exhibit: ExhibitPlacement;
   project: Project;
   content: GalleryContent;
   store: WorldStore;
+  atmosphere: Atmosphere;
   onClick: () => void;
 }) {
   const home = roomFor(content, project);
@@ -72,7 +75,7 @@ export function Artwork({
   useFrame((_, dt) => {
     const near = store.nearby?.id === exhibit.id ? 1 : 0;
     glow.current += (near - glow.current) * (1 - Math.exp(-dt / 0.25));
-    if (halo.current) halo.current.opacity = glow.current * 0.55;
+    if (halo.current) halo.current.opacity = glow.current * 0.7;
     if (group.current) {
       const s = 1 + glow.current * 0.025;
       group.current.scale.setScalar(s);
@@ -80,54 +83,61 @@ export function Artwork({
   });
 
   const { w, h } = exhibit;
-  const fw = 0.1; // frame width
   const pedestal = exhibit.kind === "pedestal";
-  const frameColor = project.openingOrder ? "#8a6a3f" : room.palette.trim;
+  const a = atmosphere;
+  const frameColor = project.openingOrder ? "#b08a4e" : mix(a.monument, "#3d3030", 0.15);
+  const steleH = exhibit.y + h / 2 + 0.85;
+  const steleW = w + 1.0;
+
+  const steleGeo = useMemo(() => (pedestal ? null : steleGeometry(steleW, steleH)), [pedestal, steleW, steleH]);
+  const frameGeo = useMemo(() => (pedestal ? null : frameGeometry(w, h, 0.09)), [pedestal, w, h]);
+  const plinthGeo = useMemo(() => (pedestal ? new THREE.LatheGeometry(
+    [[0, 0], [0.62, 0], [0.6, 0.06], [0.42, 0.2], [0.34, 0.55], [0.4, 0.88], [0.55, 0.96], [0.55, 1.0], [0, 1.0]].map(([r, y]) => new THREE.Vector2(r, y)), 64,
+  ) : null), [pedestal]);
+  const steleMat = useMemo(() => paintMaterial({
+    top: mix(a.path, a.glow, 0.45), bottom: mix(a.monument, a.path, 0.45), fog: a.horizon, y0: 0, y1: steleH, grain: 0.1, rimAmount: 0.5, rim: a.glow,
+  }), [a, steleH]);
+  useEffect(() => () => { steleGeo?.dispose(); frameGeo?.dispose(); plinthGeo?.dispose(); steleMat.dispose(); }, [steleGeo, frameGeo, plinthGeo, steleMat]);
 
   return (
     <group position={[exhibit.x, exhibit.y, exhibit.z]} rotation={[0, exhibit.rotY, 0]}>
       <group
         ref={group}
-        onClick={(e) => { e.stopPropagation(); onClick(); }}
+        onClick={(e) => { if (e.delta > 6) return; e.stopPropagation(); onClick(); }}
         onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { document.body.style.cursor = ""; }}
       >
-        {pedestal && (
-          <mesh position={[0, -exhibit.y / 2 - 0.1, 0.35]} rotation={[0, 0, 0]}>
-            <boxGeometry args={[0.9, exhibit.y - 0.3, 0.9]} />
-            <meshLambertMaterial color={room.palette.wall} />
-          </mesh>
-        )}
-        {pedestal ? (
-          // Invisible hit area around the sculpture that sits on the plinth.
-          <mesh position={[0, 0.2, 0.35]} visible={false}>
-            <boxGeometry args={[1.0, 1.2, 1.0]} />
-          </mesh>
-        ) : (
-          <mesh position={[0, 0, 0.04]}>
-            <planeGeometry args={[w, h]} />
-            {/* Distinct keys force a fresh material (and shader) once the map arrives. */}
-            {tex ? (
-              <meshBasicMaterial key="art" map={tex} toneMapped={false} />
-            ) : (
-              <meshBasicMaterial key="blank" color={room.palette.fog} toneMapped={false} />
-            )}
-          </mesh>
-        )}
-        {!pedestal && (
-          <>
-            <mesh position={[0, 0, -0.005]}>
-              <planeGeometry args={[w * 1.9, h * 1.9]} />
-              <meshBasicMaterial ref={halo} map={getGlow()} color="#fff4dc" transparent opacity={0} depthWrite={false} toneMapped={false} />
+        {pedestal && plinthGeo && (
+          <group position={[0, -exhibit.y, 0.35]}>
+            <mesh geometry={plinthGeo} material={steleMat} />
+            {/* Invisible hit area around the sculpture that sits on the plinth. */}
+            <mesh position={[0, 1.4, 0]} visible={false}>
+              <sphereGeometry args={[0.7, 12, 8]} />
             </mesh>
-            {/* Frame */}
-            <mesh position={[0, h / 2 + fw / 2, 0.05]}><boxGeometry args={[w + fw * 2, fw, 0.1]} /><meshLambertMaterial color={frameColor} /></mesh>
-            <mesh position={[0, -h / 2 - fw / 2, 0.05]}><boxGeometry args={[w + fw * 2, fw, 0.1]} /><meshLambertMaterial color={frameColor} /></mesh>
-            <mesh position={[-w / 2 - fw / 2, 0, 0.05]}><boxGeometry args={[fw, h, 0.1]} /><meshLambertMaterial color={frameColor} /></mesh>
-            <mesh position={[w / 2 + fw / 2, 0, 0.05]}><boxGeometry args={[fw, h, 0.1]} /><meshLambertMaterial color={frameColor} /></mesh>
+          </group>
+        )}
+        {!pedestal && steleGeo && frameGeo && (
+          <>
+            <mesh geometry={steleGeo} material={steleMat} position={[0, -exhibit.y, -0.26]} />
+            <mesh position={[0, 0, 0.02]}>
+              <planeGeometry args={[w * 1.9, h * 1.9]} />
+              <meshBasicMaterial ref={halo} map={getGlow()} color={a.glow} transparent opacity={0} depthWrite={false} toneMapped={false} />
+            </mesh>
+            <mesh geometry={frameGeo} position={[0, 0, 0.0]}>
+              <meshLambertMaterial color={frameColor} />
+            </mesh>
+            <mesh position={[0, 0, 0.045]}>
+              <planeGeometry args={[w, h]} />
+              {/* Distinct keys force a fresh material (and shader) once the map arrives. */}
+              {tex ? (
+                <meshBasicMaterial key="art" map={tex} toneMapped={false} />
+              ) : (
+                <meshBasicMaterial key="blank" color={a.horizon} toneMapped={false} />
+              )}
+            </mesh>
           </>
         )}
-        <mesh position={[0, pedestal ? -0.35 : -h / 2 - 0.36, pedestal ? 0.82 : 0.03]}>
+        <mesh position={[0, pedestal ? -0.32 : -h / 2 - 0.34, pedestal ? 0.93 : 0.03]}>
           <planeGeometry args={[pedestal ? 0.8 : 0.9, pedestal ? 0.15 : 0.17]} />
           <meshBasicMaterial map={plaque} toneMapped={false} />
         </mesh>
