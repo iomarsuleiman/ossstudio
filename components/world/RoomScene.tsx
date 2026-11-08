@@ -139,6 +139,26 @@ function Portal({ door, content, locale, a }: { door: DoorPlacement; content: Ga
   );
 }
 
+/** A lighter arch over the path that announces a section within a hall. */
+function SectionArch({ id, z, shape, locale, room, a }: { id: "linux" | "inventions"; z: number; shape: RoomShape; locale: Locale; room: Room; a: Atmosphere }) {
+  const ui = UI[locale];
+  const title = id === "linux" ? ui.linuxDistributions : ui.physicalInventions;
+  const geo = useDisposable(() => archTube(shape.width - 1.0, 6.2, 0.1), [shape]);
+  const mat = useDisposable(() => paintMaterial({ top: a.glow, bottom: mix(a.monument, a.glow, 0.4), fog: a.horizon, y0: 0, y1: 6, rimAmount: 0.5, rim: a.glow }), [a]);
+  const sign = useCanvasTexture(() => paintSign(title, room.t[locale].title, locale, room.palette, 1024, 300), [title, locale, room.id]);
+  // Stands in the empty bay reserved for the section sign.
+  const zz = z;
+  return (
+    <group position={[0, 0, zz]}>
+      <mesh geometry={geo} material={mat} />
+      <mesh position={[0, 6.0, 0.05]}>
+        <planeGeometry args={[2.8, 0.82]} />
+        <meshBasicMaterial map={sign} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function IntroPanel({ room, locale, shape, a }: { room: Room; locale: Locale; shape: RoomShape; a: Atmosphere }) {
   const sign = useCanvasTexture(() => paintSign(room.t[locale].title, room.t[locale].subtitle, locale, room.palette), [room.id, locale]);
   const geo = useDisposable(() => new THREE.ExtrudeGeometry(archShape(3.0, 2.9), { depth: 0.14, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05, bevelSegments: 4, curveSegments: 48 }), []);
@@ -363,6 +383,7 @@ export function RoomScene({
       <Walkway shape={shape} a={a} accent={room.palette.accent} onFloorClick={onFloorClick} />
       {!isMain && <GateArches shape={shape} a={a} />}
       {!isMain && <IntroPanel room={room} locale={locale} shape={shape} a={a} />}
+      {shape.sections?.map((sec) => <SectionArch key={sec.id} id={sec.id} z={sec.z} shape={shape} locale={locale} room={room} a={a} />)}
       {isMain && (
         <>
           <EntranceMap content={content} locale={locale} store={store} onRoom={onMapRoom} />

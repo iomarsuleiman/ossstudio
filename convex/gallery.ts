@@ -40,6 +40,7 @@ export const content = query({
           slug: p.slug, title: p.title, catalogName: p.catalogName, roomId: p.roomId,
           category: p.category, openness: p.openness, site: p.site, source: p.source,
           openingOrder: p.openingOrder, motif: p.motif,
+          aliases: p.aliases ?? [], comingSoon: p.comingSoon,
           t: tByProject.get(p._id) ?? {},
         })),
       exhibits: exhibits.map(({ _id, _creationTime, exhibitId, ...e }) => ({ id: exhibitId, ...e })),

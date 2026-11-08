@@ -16,6 +16,8 @@ export default defineSchema({
     source: v.string(),
     openingOrder: v.optional(v.number()),
     motif: v.optional(v.string()),
+    aliases: v.optional(v.array(v.string())),
+    comingSoon: v.optional(v.boolean()),
     status: v.union(v.literal("published"), v.literal("draft")),
     version: v.number(),
   })
@@ -42,6 +44,7 @@ export default defineSchema({
       width: v.number(),
       length: v.number(),
       benches: v.array(v.object({ x: v.number(), z: v.number() })),
+      sections: v.optional(v.array(v.object({ id: v.union(v.literal("linux"), v.literal("inventions")), z: v.number() }))),
     }),
   }).index("by_roomId", ["roomId"]),
 

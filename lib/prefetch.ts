@@ -41,7 +41,14 @@ export class PrefetchQueue {
     total: 0, done: 0, failed: 0, artworksTotal: 0, artworksDone: 0, paused: false, finished: false,
   };
 
+  private hidden = false;
+
   constructor(private concurrency = 2) {
+    // Pause while the tab is hidden; resume when the visitor returns.
+    document.addEventListener("visibilitychange", () => {
+      this.hidden = document.hidden;
+      if (!this.hidden) this.pump();
+    });
     const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
     if (conn?.saveData || conn?.effectiveType === "slow-2g" || conn?.effectiveType === "2g") this.state.paused = true;
   }
@@ -91,7 +98,7 @@ export class PrefetchQueue {
   }
 
   private pump() {
-    while (this.running < this.concurrency) {
+    while (this.running < this.concurrency && !this.hidden) {
       const task = this.next();
       if (!task) break;
       this.running++;

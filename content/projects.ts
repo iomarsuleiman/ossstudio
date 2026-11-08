@@ -4,10 +4,14 @@
 // offline fallback when no Convex deployment is configured.
 
 export type CategoryCode = "EU" | "PS" | "CT" | "ME" | "PL" | "AT" | "DI" | "SH" | "AM";
-export type OpennessCode = "oss" | "fullyOpenModel" | "openWeights" | "openCore" | "openStandard";
+export type OpennessCode = "oss" | "fullyOpenModel" | "openWeights" | "openCore" | "openStandard" | "planned" | "unverified";
 
 export interface RawProject {
   title: string;
+  /** Stable URL id when the display title has changed since launch. */
+  slug?: string;
+  /** Shown with a Coming Soon placard (not yet open source). */
+  comingSoon?: boolean;
   /** Name as catalogued in Notion when it differs from the display title. */
   catalogName?: string;
   cat: CategoryCode;
@@ -145,9 +149,10 @@ export const RAW_PROJECTS: RawProject[] = [
   p("DeepSeek-R1", "AM", "openWeights", "https://github.com/deepseek-ai/DeepSeek-R1", "https://huggingface.co/deepseek-ai/DeepSeek-R1",
     "MIT-licensed reasoning weights, notable for open-weight competition.",
     "نموذج استدلال بأوزان مرخّصة بـ MIT غيّر المنافسة بين النماذج المفتوحة."),
-  p("diagrams.net", "PL", "oss", "https://app.diagrams.net", "https://github.com/jgraph/drawio",
+  p("draw.io / diagrams.net", "PL", "oss", "https://app.diagrams.net", "https://github.com/jgraph/drawio",
     "Full-featured diagramming and flowcharts in the browser or desktop.",
-    "ارسم المخططات والمسارات في المتصفح أو على جهازك."),
+    "ارسم المخططات والمسارات في المتصفح أو على جهازك.",
+    { slug: "diagrams-net" }),
   p("Docker Engine", "DI", "oss", "https://docs.docker.com/engine/", "https://github.com/moby/moby",
     "Open-source container engine that packages software so it runs the same everywhere.",
     "محرك حاويات مفتوح يغلّف البرامج لتعمل بنفس الطريقة في كل مكان.",

@@ -9,7 +9,7 @@ import { arrivalFor } from "@/content/layout";
 import { STATIC_ASSETS } from "@/content/assets";
 import { UI, dirOf } from "@/lib/i18n";
 import { getAudio } from "@/lib/audio";
-import { artworkUrl, roomFor } from "@/lib/artworks";
+import { artworkUrl, isArtworkReady, roomFor } from "@/lib/artworks";
 import { PrefetchQueue, type PrefetchState } from "@/lib/prefetch";
 import { createWorldStore, loadVisit, saveVisit, type WorldStore } from "@/lib/worldStore";
 import { dominantColor } from "@/lib/painter";
@@ -17,6 +17,10 @@ import { ExhibitView } from "./ExhibitView";
 import { MapDialog } from "./MapDialog";
 import { Joystick } from "./Joystick";
 import { ATMOSPHERE } from "./world/atmosphere";
+import { CollectButton } from "./CollectButton";
+import { CollectionShelf } from "./CollectionShelf";
+import { GiftShop } from "./GiftShop";
+import { collection, useCollection } from "@/lib/collection";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
 
@@ -73,9 +77,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const target = initial.exhibit ?? initial.at;
     const e = target ? realExhibit(content, target) : undefined;
     if (e) return { roomId: e.roomId, pos: { x: e.spawn.x, z: e.spawn.z }, yaw: e.spawn.yaw, entered: !!initial.exhibit, exhibit: initial.exhibit ? e : null };
-    const visit = typeof window !== "undefined" ? loadVisit() : null;
-    if (visit && (!initial.roomId || initial.roomId === visit.roomId))
-      return { roomId: visit.roomId, pos: visit.pos, yaw: visit.yaw, entered: visit.entered, exhibit: null };
+    // A saved visit (language switch, reload) is restored after mount so the
+    // server and the first client render agree.
     if (initial.roomId && initial.roomId !== "main") {
       const a = arrivalFor(content.doors, "main", initial.roomId);
       return { roomId: initial.roomId, pos: { x: a.x, z: a.z }, yaw: a.yaw, entered: false, exhibit: null };
@@ -101,15 +104,20 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const [mapOpen, setMapOpen] = useState(false);
   const [nearby, setNearby] = useState<ExhibitPlacement | null>(null);
   const [wash, setWash] = useState<Wash>({ phase: start.exhibit ? "in" : "idle", kind: "ink", color: start.exhibit ? dominantColor(roomFor(content, content.projects.find((p) => p.slug === start.exhibit!.slug)!)) : "#86394a" });
-  const [sound, setSound] = useState(() => (typeof window !== "undefined" ? loadVisit()?.sound ?? false : false) && !audio.muted);
+  const [sound, setSound] = useState(false);
   const [volume, setVolume] = useState(audio.volume);
   const [ready, setReady] = useState(false);
   const [webgl, setWebgl] = useState(true);
   const [reduced, setReduced] = useState(false);
   const [touch, setTouch] = useState(false);
+  // Optional side-on view (offered on touch screens); first person is the default.
+  const [view, setView] = useState<"first" | "side">("first");
   const [prefetch, setPrefetch] = useState<PrefetchState | null>(null);
   const [hint, setHint] = useState(false);
   const [veil, setVeil] = useState<Veil | null>(null);
+  const [shelfOpen, setShelfOpen] = useState(false);
+  const [checkout, setCheckout] = useState<string[] | null>(null);
+  const collected = useCollection();
   const [nearMap, setNearMap] = useState(false);
   const pushed = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -126,12 +134,39 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const apply = () => { setReduced(mq.matches); store.reducedMotion = mq.matches; };
     apply();
     mq.addEventListener("change", apply);
-    setTouch(window.matchMedia("(pointer: coarse)").matches);
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    setTouch(coarse);
+    try {
+      if (coarse && localStorage.getItem("osg:view") === "side") {
+        setView("side");
+        store.view = "side";
+        store.viewBlend = 1;
+        store.sideSign = store.pos.x > 0 ? -1 : 1;
+      }
+    } catch {
+      /* storage unavailable */
+    }
     const t = timers.current;
     return () => { mq.removeEventListener("change", apply); t.forEach(clearTimeout); };
   }, [store]);
 
   useEffect(() => { store.reducedMotion = reduced; }, [reduced, store]);
+
+  // Restore a saved visit (same room, or no room in the URL) once mounted.
+  useEffect(() => {
+    setSound(!audio.muted);
+    if (initial.exhibit || initial.at) return;
+    const visit = loadVisit();
+    if (!visit || (initial.roomId && initial.roomId !== "main" && initial.roomId !== visit.roomId)) return;
+    if (initial.roomId === "main" && visit.roomId !== "main" && !visit.entered) return;
+    store.roomId = visit.roomId;
+    store.pos = { ...visit.pos };
+    store.yaw = store.targetYaw = visit.yaw;
+    store.snapCamera = true;
+    setRoomId(visit.roomId);
+    if (visit.entered) { setEntered(true); store.mode = "walk"; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // `?debug` exposes the world state for automated walk-through tests.
   useEffect(() => {
@@ -164,7 +199,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const vt = supportsViewTransitions();
     startTransition(() => setVeil({ to }));
     const cover = reduced ? 250 : 950;
-    const hold = reduced ? 250 : 900;
     later(() => {
       store.roomId = to;
       store.pos = { x: pos.x, z: pos.z };
@@ -180,7 +214,14 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       setNearMap(false);
       setRoomId(to);
       window.history.replaceState(null, "", roomPath(locale, to));
-      later(() => {
+      // Lift the veil as soon as the destination's artworks are ready (no fake
+      // waiting), with a short floor so the room has drawn, and a ceiling.
+      const destination = content.projects.filter((p) => p.roomId === to);
+      const startWait = performance.now();
+      const reveal = () => {
+        const waited = performance.now() - startWait;
+        const ready = destination.every((p) => isArtworkReady(p.slug));
+        if (waited < 200 || (!ready && waited < 2500)) { later(reveal, 100); return; }
         if (vt) startTransition(() => setVeil(null));
         else {
           setVeil({ to, leaving: true });
@@ -188,10 +229,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         }
         store.mode = "walk";
         persist();
-      }, hold);
+      };
+      later(reveal, 0);
     }, cover);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, audio, locale, persist, reduced]);
+  }, [store, audio, locale, persist, reduced, content]);
 
   const teleportToProject = useCallback((slug: string) => {
     const e = realExhibit(content, slug);
@@ -314,10 +356,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (openSlug) { if (e.key === "Escape") { e.preventDefault(); closeExhibit(); } return; }
-      if (mapOpen || !entered) return;
+      if (mapOpen || shelfOpen || checkout || !entered) return;
       const move = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
       if (e.code === "KeyM") { e.preventDefault(); setMapOpen(true); return; }
+      if (e.code === "KeyC" && store.nearby) { e.preventDefault(); collection.toggle(store.nearby.slug); return; }
       const onButton = e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement;
       if (e.code === "KeyE" || (e.key === "Enter" && !onButton)) {
         if (store.nearby) { e.preventDefault(); openExhibit(store.nearby); }
@@ -330,12 +373,13 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
-  }, [store, openSlug, mapOpen, entered, closeExhibit, openExhibit]);
+  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit]);
 
   useEffect(() => {
-    if (mapOpen) { store.keys.clear(); if (store.mode === "walk") store.mode = "transition"; }
+    const paused = mapOpen || shelfOpen || !!checkout;
+    if (paused) { store.keys.clear(); store.joy = { x: 0, y: 0 }; if (store.mode === "walk") store.mode = "transition"; }
     else if (store.mode === "transition" && wash.phase === "idle" && !veil && entered && !openSlug) store.mode = "walk";
-  }, [mapOpen, store, wash.phase, veil, entered, openSlug]);
+  }, [mapOpen, shelfOpen, checkout, store, wash.phase, veil, entered, openSlug]);
 
   // --- entering the gallery -----------------------------------------------------------
   const enterGallery = async (withSound: boolean) => {
@@ -353,6 +397,21 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     persist();
   };
 
+  const toggleView = () => {
+    const next = view === "side" ? "first" : "side";
+    setView(next);
+    store.view = next;
+    store.keys.clear();
+    store.joy = { x: 0, y: 0 };
+    store.depthInvert = false;
+    // Start with the camera on the side that shows the nearer wall.
+    if (next === "side") store.sideSign = store.pos.x > 0 ? -1 : 1;
+    else store.targetPitch = 0;
+    try { localStorage.setItem("osg:view", next); } catch { /* storage unavailable */ }
+    setHint(true);
+    later(() => setHint(false), 8000);
+  };
+
   const switchLanguage = () => {
     persist();
     const other: Locale = locale === "en" ? "ar" : "en";
@@ -364,7 +423,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   useEffect(() => {
     if (!ready) return;
     if (!queue) {
-      queue = new PrefetchQueue(2);
+      // One background connection on phones and small devices, two elsewhere.
+      const constrained = window.matchMedia("(pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
+      queue = new PrefetchQueue(constrained ? 1 : 2);
       const other = locale === "en" ? "ar" : "en";
       queue.add([
         ...STATIC_ASSETS.map((a) => ({ key: `asset:${a.key}`, group: "assets" as const, priority: a.priority, run: () => fetch(a.url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); }) })),
@@ -429,6 +490,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <button type="button" className="btn btn-glass" onClick={() => setMapOpen(true)} aria-keyshortcuts="M">
               {ui.map}
             </button>
+            <button type="button" className="btn btn-glass hud-collection" onClick={() => setShelfOpen(true)}>
+              <span aria-hidden="true">✦</span> {ui.collectionButton(collected.length)}
+            </button>
             <button type="button" className="btn btn-glass" onClick={toggleSound} aria-pressed={sound}>
               {sound ? ui.soundOn : ui.soundOff}
             </button>
@@ -442,6 +506,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <button type="button" className="btn btn-glass" onClick={switchLanguage} aria-label={ui.languageLabel} lang={locale === "en" ? "ar" : "en"}>
               {ui.language}
             </button>
+            {touch && (
+              <button type="button" className="btn btn-glass" onClick={toggleView} aria-pressed={view === "side"}>
+                {view === "side" ? ui.viewFirst : ui.viewSide}
+              </button>
+            )}
             <Link className="btn btn-glass" href={`/${locale}/index`}>{ui.index}</Link>
           </nav>
         </header>
@@ -464,15 +533,19 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
               <div className="nearby-card" key={nearby.id}>
                 <p className="nearby-title"><bdi>{nearbyProject.title}</bdi></p>
                 <p className="nearby-line">{nearbyProject.t[locale]?.oneLine}</p>
-                <button type="button" className="btn btn-primary" onClick={() => openExhibit(nearby)} aria-keyshortcuts="E">
-                  {ui.enterArtwork}
-                  {!touch && <span className="kbd" aria-hidden="true">E</span>}
-                </button>
+                <div className="nearby-actions">
+                  <button type="button" className="btn btn-primary" onClick={() => openExhibit(nearby)} aria-keyshortcuts="E">
+                    {ui.enterArtwork}
+                    {!touch && <span className="kbd" aria-hidden="true">E</span>}
+                  </button>
+                  <CollectButton slug={nearbyProject.slug} locale={locale} />
+                </div>
+                {nearbyProject.comingSoon && <p className="placard-soon">{ui.comingSoon}</p>}
               </div>
             )}
           </div>
           {hint && (
-            <p className="controls-hint" role="note">{touch ? ui.controlsTouch : ui.controlsDesktop}</p>
+            <p className="controls-hint" role="note">{view === "side" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}</p>
           )}
         </div>
       )}
@@ -531,6 +604,20 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <Link className="link small" href={`/${locale}/index`}>{ui.index}</Link>
           </div>
         </div>
+      )}
+
+      {shelfOpen && (
+        <CollectionShelf
+          content={content}
+          locale={locale}
+          onClose={() => setShelfOpen(false)}
+          onCheckout={(slugs) => { setShelfOpen(false); setCheckout(slugs); }}
+          onGoTo={(slug) => { setShelfOpen(false); teleportToProject(slug); }}
+        />
+      )}
+
+      {checkout && (
+        <GiftShop content={content} locale={locale} slugs={checkout} onBack={() => { setCheckout(null); setShelfOpen(true); }} />
       )}
 
       {mapOpen && (

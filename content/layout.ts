@@ -7,6 +7,7 @@
 
 import type { RoomId } from "./rooms";
 import { MAIN_HALL_HIGHLIGHTS, PHYSICAL_INVENTIONS } from "./rooms";
+import { LINUX_DISTRIBUTIONS } from "./catalogue-2";
 
 interface ProjectLike { slug: string; roomId: RoomId; openingOrder?: number; title: string }
 interface RoomLike { id: RoomId; order: number }
@@ -38,6 +39,8 @@ export interface RoomShape {
   width: number;
   length: number;
   benches: { x: number; z: number }[];
+  /** Signed sub-sections within a hall (e.g. Linux Distributions), placed at z. */
+  sections?: { id: "linux" | "inventions"; z: number }[];
 }
 
 const FRAME_SPACING = 3.6;
@@ -80,19 +83,23 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
   galleries.forEach((room, gi) => {
     const inRoom = projects.filter((p) => p.roomId === room.id);
     const alcove = inRoom.filter((p) => PHYSICAL_INVENTIONS.includes(p.slug));
+    const distros = LINUX_DISTRIBUTIONS.map((s) => inRoom.find((p) => p.slug === s)).filter((p): p is ProjectLike => !!p);
     const rest = inRoom
-      .filter((p) => !PHYSICAL_INVENTIONS.includes(p.slug))
+      .filter((p) => !PHYSICAL_INVENTIONS.includes(p.slug) && !LINUX_DISTRIBUTIONS.includes(p.slug))
       .sort((a, b) => {
         const ao = a.openingOrder ?? 999;
         const bo = b.openingOrder ?? 999;
         return ao !== bo ? ao - bo : a.title.localeCompare(b.title);
       });
-    const pairs = Math.ceil(rest.length / 2) + (alcove.length ? 1 : 0);
+    // Each signed section starts on a fresh pair and leaves one empty pair for its sign.
+    const pairs = Math.ceil(rest.length / 2) + (distros.length ? Math.ceil(distros.length / 2) + 1 : 0) + (alcove.length ? 2 : 0);
     const length = Math.max(18, pairs * FRAME_SPACING + 9);
     const half = length / 2;
     const benches: { x: number; z: number }[] = [];
     for (let z = half - 12; z > -half + 6; z -= 13) benches.push({ x: 0, z });
-    shapes.push({ roomId: room.id, width: ROOM_WIDTH, length, benches });
+    const sections: NonNullable<RoomShape["sections"]> = [];
+    const shape: RoomShape = { roomId: room.id, width: ROOM_WIDTH, length, benches, sections };
+    shapes.push(shape);
 
     const place = (p: ProjectLike, idx: number, kind: ExhibitPlacement["kind"]) => {
       const left = idx % 2 === 0;
@@ -116,9 +123,22 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         spawn: { x: left ? x + SPAWN_DIST : x - SPAWN_DIST, z, yaw: left ? -Math.PI / 2 : Math.PI / 2 },
       });
     };
+    const zOfIndex = (idx: number) => half - 5 - Math.floor(idx / 2) * FRAME_SPACING;
     rest.forEach((p, i) => place(p, i, "frame"));
-    const base = Math.ceil(rest.length / 2) * 2;
-    alcove.forEach((p, i) => place(p, base + i, "pedestal"));
+    let base = Math.ceil(rest.length / 2) * 2;
+    if (distros.length) {
+      sections.push({ id: "linux", z: zOfIndex(base) });
+      base += 2;
+      distros.forEach((p, i) => place(p, base + i, "frame"));
+      base += Math.ceil(distros.length / 2) * 2;
+    }
+    if (alcove.length) {
+      sections.push({ id: "inventions", z: zOfIndex(base) });
+      base += 2;
+      alcove.forEach((p, i) => place(p, base + i, "pedestal"));
+    }
+    // Keep benches clear of section signs.
+    shape.benches = benches.filter((b) => sections.every((s) => Math.abs(s.z - b.z) > 2));
 
     // Entrance (back to the Main Hall) and onward door to the next gallery.
     const next = galleries[gi + 1]?.id ?? "main";

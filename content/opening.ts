@@ -7,7 +7,10 @@ export type Motif =
   | "branches" | "pages" | "editor" | "containers" | "cloud" | "bridge"
   | "cabinet" | "search" | "screen" | "film" | "filter" | "chip" | "window"
   | "terminal" | "foundation" | "transform" | "flame" | "diorama" | "tables"
-  | "circuit" | "vault";
+  | "circuit" | "vault"
+  // Catalogue additions
+  | "fedora" | "arch" | "mint" | "debian" | "ubuntu" | "doorway" | "suitcase"
+  | "paperPlane" | "blocks" | "towers" | "launcher";
 
 export interface OpeningExtra {
   motif: Motif;

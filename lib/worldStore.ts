@@ -19,6 +19,16 @@ export interface WorldStore {
   joy: { x: number; y: number };
   /** Standing by the entrance map. */
   nearMap: boolean;
+  /** Camera style: through your own eyes, or side-on watching your figure. */
+  view: "first" | "side";
+  /** 0 = first person, 1 = side view (eased between the two). */
+  viewBlend: number;
+  /** Side view: which side of the path the camera is on (+1 = +x). */
+  sideSign: 1 | -1;
+  /** Side view: camera orbit angle around the visitor (eases when flipping). */
+  sideAngle: number;
+  /** Side view: keep "toward/away" input steady across a camera flip until released. */
+  depthInvert: boolean;
   keys: Set<string>;
   /** Tap/click-to-move destination. */
   target: { x: number; z: number } | null;
@@ -53,6 +63,11 @@ export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, 
     vel: { x: 0, z: 0 },
     joy: { x: 0, y: 0 },
     nearMap: false,
+    view: "first",
+    viewBlend: 0,
+    sideSign: 1,
+    sideAngle: 0,
+    depthInvert: false,
     keys: new Set(),
     target: null,
     targetExhibit: null,

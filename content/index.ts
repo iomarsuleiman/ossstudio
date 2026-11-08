@@ -1,6 +1,7 @@
 import { RAW_PROJECTS, type CategoryCode, type OpennessCode } from "./projects";
 import { RAW_ROOMS, CATEGORY_ROOM, ROOM_OVERRIDES, type RoomId } from "./rooms";
 import { OPENING, type Motif } from "./opening";
+import { ALIASES, EXTRA_MOTIFS, NEW_PROJECTS, curatedRoom } from "./catalogue-2";
 import { layoutGallery, type ExhibitPlacement, type DoorPlacement, type RoomShape } from "./layout";
 
 export type Locale = "en" | "ar";
@@ -25,6 +26,10 @@ export interface Project {
   source: string;
   openingOrder?: number;
   motif?: Motif;
+  /** Extra search words (aliases, synonyms) in any language. */
+  aliases: string[];
+  /** Shown with a Coming Soon placard. */
+  comingSoon?: boolean;
   t: Record<Locale, ProjectText>;
 }
 
@@ -55,24 +60,27 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export const CONTENT_REVISION = "2026-11-08.1";
+export const CONTENT_REVISION = "2026-11-08.2";
 
 /** Assemble the bundled catalogue (also used as the Convex seed). */
 export function buildBundledContent(): GalleryContent {
-  const projects: Project[] = RAW_PROJECTS.map((r) => {
-    const slug = slugify(r.title);
+  const projects: Project[] = [...RAW_PROJECTS, ...NEW_PROJECTS].map((r) => {
+    const slug = r.slug ?? slugify(r.title);
     const extra = OPENING[slug];
+    const catalogName = r.catalogName ?? r.title;
     return {
       slug,
       title: r.title,
-      catalogName: r.catalogName ?? r.title,
-      roomId: ROOM_OVERRIDES[slug] ?? CATEGORY_ROOM[r.cat],
+      catalogName,
+      roomId: curatedRoom(catalogName) ?? ROOM_OVERRIDES[slug] ?? CATEGORY_ROOM[r.cat],
+      aliases: ALIASES[catalogName] ?? [],
+      comingSoon: r.comingSoon,
       category: r.cat,
       openness: r.open,
       site: r.site,
       source: r.source,
       openingOrder: r.order,
-      motif: extra?.motif,
+      motif: extra?.motif ?? EXTRA_MOTIFS[slug],
       t: {
         en: { oneLine: r.en, why: extra?.why.en, installation: extra?.installation.en, caution: r.cautionEn },
         ar: { oneLine: r.ar, why: extra?.why.ar, installation: extra?.installation.ar, caution: r.cautionAr },
@@ -102,6 +110,14 @@ export const OPENNESS_TEXT: Record<OpennessCode, Record<Locale, { label: string;
   openCore: {
     en: { label: "Partly open", explain: "Some important parts are open source, and some are not." },
     ar: { label: "مفتوح جزئيًا", explain: "بعض الأجزاء المهمة مفتوحة المصدر وبعضها ليس كذلك." },
+  },
+  planned: {
+    en: { label: "Not open source yet", explain: "The makers plan to open the source code in the future. Today it is not open source." },
+    ar: { label: "ليس مفتوح المصدر بعد", explain: "يخطط صانعوه لفتح الشيفرة المصدرية مستقبلًا. اليوم ليس مفتوح المصدر." },
+  },
+  unverified: {
+    en: { label: "Being verified", explain: "We are still confirming exactly which project this is and how it is licensed." },
+    ar: { label: "قيد التحقق", explain: "ما زلنا نتأكد من هوية المشروع بالضبط ومن ترخيصه." },
   },
   openStandard: {
     en: { label: "Open standard", explain: "A shared, published specification anyone can build on. It is not a program itself." },

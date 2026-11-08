@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { OPENNESS_TEXT, type GalleryContent, type Locale, type Project } from "@/content";
 import { UI } from "@/lib/i18n";
 import { artworkUrl, roomFor } from "@/lib/artworks";
+import { CollectButton } from "./CollectButton";
 
 export function ExhibitArt({ project, content, title }: { project: Project; content: GalleryContent; title: string }) {
   const room = roomFor(content, project);
@@ -63,6 +64,7 @@ export function ExhibitView({
         <ExhibitArt project={project} content={content} title={project.title} />
         <div className="exhibit-text">
           {project.openingOrder && <p className="eyebrow">{ui.openingCollection}</p>}
+          {project.comingSoon && <p className="placard-soon">{ui.comingSoon}</p>}
           <h1 ref={headingRef ?? localRef} tabIndex={-1} className="exhibit-title">
             <bdi>{project.title}</bdi>
           </h1>
@@ -90,10 +92,13 @@ export function ExhibitView({
             </section>
           )}
           <div className="exhibit-links">
-            <a className="btn btn-primary" href={project.site} target="_blank" rel="noopener noreferrer">
-              {ui.visitWebsite} <span aria-hidden="true">↗</span>
-            </a>
-            {project.source !== project.site && (
+            <CollectButton slug={project.slug} locale={locale} />
+            {project.site && (
+              <a className="btn btn-primary" href={project.site} target="_blank" rel="noopener noreferrer">
+                {ui.visitWebsite} <span aria-hidden="true">↗</span>
+              </a>
+            )}
+            {project.source && project.source !== project.site && (
               <a className="btn" href={project.source} target="_blank" rel="noopener noreferrer">
                 {sourceLabel} <span aria-hidden="true">↗</span>
               </a>

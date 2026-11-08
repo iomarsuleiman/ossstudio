@@ -6,6 +6,9 @@ import type { GalleryContent, Locale, RoomId } from "@/content";
 import type { WorldStore } from "@/lib/worldStore";
 import { RoomScene } from "./RoomScene";
 import { FirstPerson } from "./FirstPerson";
+import { Figure } from "./Figure";
+import { FrameDriver } from "./FrameDriver";
+import { ATMOSPHERE } from "./atmosphere";
 
 export default function World({
   content, locale, roomId, store, onReady, onExhibitClick, onFloorClick, onMapRoom,
@@ -23,7 +26,8 @@ export default function World({
   return (
     <Canvas
       className="world-canvas"
-      dpr={[1, 1.75]}
+      dpr={1}
+      frameloop="demand"
       camera={{ fov: 62, near: 0.05, far: 400, position: [0, 1.62, 8] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
@@ -33,6 +37,7 @@ export default function World({
       }}
       aria-hidden="true"
     >
+      <FrameDriver store={store} />
       <group key={roomId}>
         <RoomScene
           content={content}
@@ -44,6 +49,7 @@ export default function World({
           onMapRoom={onMapRoom}
         />
         <FirstPerson content={content} room={room} store={store} />
+        <Figure store={store} atmosphere={ATMOSPHERE[room.id]} />
       </group>
     </Canvas>
   );

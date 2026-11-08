@@ -24,7 +24,8 @@ export const run = internalMutation({
       const projectId = await ctx.db.insert("projects", {
         slug: p.slug, title: p.title, catalogName: p.catalogName, roomId: p.roomId,
         category: p.category, openness: p.openness, site: p.site, source: p.source,
-        openingOrder: p.openingOrder, motif: p.motif, status: "published", version: 1,
+        openingOrder: p.openingOrder, motif: p.motif, aliases: p.aliases, comingSoon: p.comingSoon,
+        status: "published", version: 1,
       });
       for (const locale of ["en", "ar"] as const) {
         await ctx.db.insert("projectTranslations", { projectId, locale, ...p.t[locale] });
@@ -34,7 +35,7 @@ export const run = internalMutation({
       const shape = content.shapes.find((s) => s.roomId === r.id)!;
       await ctx.db.insert("rooms", {
         roomId: r.id, order: r.order, palette: r.palette, map: r.map,
-        shape: { width: shape.width, length: shape.length, benches: shape.benches },
+        shape: { width: shape.width, length: shape.length, benches: shape.benches, sections: shape.sections },
       });
       for (const locale of ["en", "ar"] as const) {
         await ctx.db.insert("roomTranslations", { roomId: r.id, locale, ...r.t[locale] });
