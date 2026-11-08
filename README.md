@@ -54,6 +54,8 @@ npx convex run seed:run   # loads all 166 projects, rooms, translations and plac
 npm run dev
 ```
 
+If `npx convex dev` fails with **Could not resolve "convex/server"**, the project's packages aren't installed yet in that folder. Run `npm install` first, then `npx convex dev` again.
+
 `convex/_generated` is committed so the app type-checks before you run `convex dev`; the CLI regenerates it.
 
 Optional editorial access (for `admin:updateProjectText`):
