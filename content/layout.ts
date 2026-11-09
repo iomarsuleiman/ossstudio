@@ -16,7 +16,6 @@ export const INSTALLATION_MOTIFS = [
   "chess", "sculpture", "voice", "send", "branches", "wave",
   "reel", "containers", "constellation", "vault", "circuit", "chip",
 ] as const;
-const hasSculpture = (p: ProjectLike) => !!p.motif && (INSTALLATION_MOTIFS as readonly string[]).includes(p.motif);
 interface RoomLike { id: RoomId; order: number }
 
 export interface ExhibitPlacement {
@@ -82,7 +81,7 @@ const MAIN_L = 24;
 const MAIN_DOOR_Z = [-7.5, -2.5, 2.5, 7.5];
 
 /** Shared with rendering and navigation so benches reserve the entrance sign's bay. */
-export const INTRO_PANEL_INSET = 7.6;
+export const INTRO_PANEL_INSET = 2.5;
 
 export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
   const exhibits: ExhibitPlacement[] = [];
@@ -92,8 +91,8 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
   const galleries = ordered.filter((r) => r.id !== "main");
 
   // --- Main Hall -----------------------------------------------------------
-  // Two benches face the highlights wall, clear of the entrance map and the portals.
-  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [{ x: -3.6, z: -6.4, rotY: Math.PI }, { x: 3.6, z: -6.4, rotY: Math.PI }] });
+  // Each pair of highlights has back-to-back seating, clear of the map and portals.
+  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [-3.6, 3.6].flatMap((x) => [{ x, z: -6.72, rotY: Math.PI }, { x, z: -6.08, rotY: 0 }]) });
   MAIN_HALL_HIGHLIGHTS.forEach((slug, i) => {
     const x = -5.4 + i * 3.6;
     const z = -MAIN_L / 2 + 0.12;
@@ -149,7 +148,6 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         return;
       }
       const x = left ? -ROOM_WIDTH / 2 + 0.1 : ROOM_WIDTH / 2 - 0.1;
-      if (kind === "frame") frames.push({ idx, exhibit: exhibits.length, clear: !hasSculpture(p) });
       exhibits.push({
         id: `${room.id}:${p.slug}`, slug: p.slug, roomId: room.id, kind,
         x, y: opening ? 2.0 : 1.9, z,
@@ -158,7 +156,6 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         spawn: { x: left ? x + SPAWN_DIST : x - SPAWN_DIST, z, yaw: left ? -Math.PI / 2 : Math.PI / 2 },
       });
     };
-    const frames: { idx: number; exhibit: number; clear: boolean }[] = [];
     const zOfIndex = (idx: number) => half - 5 - Math.floor(idx / 2) * FRAME_SPACING;
     rest.forEach((p, i) => place(p, i, "frame"));
     let base = Math.ceil(rest.length / 2) * 2;
@@ -173,35 +170,21 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
       base += 2;
       alcove.forEach((p, i) => place(p, base + i, "pedestal"));
     }
-    // Benches run parallel to the walls, 2.8 m in front of a painting and
-    // facing it. Every third pair gets one, alternating walls so the middle of
-    // the path stays clear, and never where a sculpture would block the view.
-    const byPair = new Map<number, typeof frames>();
-    for (const f of frames) byPair.set(Math.floor(f.idx / 2), [...(byPair.get(Math.floor(f.idx / 2)) ?? []), f]);
-    for (const [pair, list] of byPair) {
-      if (pair % 3 !== 1) continue;
-      const preferLeft = Math.floor(pair / 3) % 2 === 0;
-      const pick = [...list].sort((a, b) => Number((b.idx % 2 === 0) === preferLeft) - Number((a.idx % 2 === 0) === preferLeft)).find((f) => {
-        if (!f.clear) return false;
-        const z = exhibits[f.exhibit].z;
-        // The rotated entrance panel occupies the left side of this bay.
-        // Include the bench's length and room to approach or stand up.
-        if (f.idx % 2 === 0 && Math.abs(z - (half - INTRO_PANEL_INSET)) < 2.5) return false;
-        return sections.every((s) => Math.abs(s.z - z) > 1.5);
-      });
-      if (!pick) continue;
-      const e = exhibits[pick.exhibit];
-      const left = pick.idx % 2 === 0;
-      benches.push({ x: left ? e.x + 2.8 : e.x - 2.8, z: e.z, rotY: left ? -Math.PI / 2 : Math.PI / 2 });
-      // With a bench in front, the standing viewing spot moves between bench and painting.
-      e.spawn = { ...e.spawn, x: left ? e.x + 1.9 : e.x - 1.9 };
+    // Every pair of facing artworks gets two outward-facing benches with
+    // their backs together. Side aisles stay open for walking and sculptures.
+    const bays = new Set(exhibits.filter((e) => e.roomId === room.id).map((e) => e.z));
+    for (const z of bays) {
+      benches.push(
+        { x: -0.32, z, rotY: -Math.PI / 2 },
+        { x: 0.32, z, rotY: Math.PI / 2 },
+      );
     }
 
     // Entrance (back to the Main Hall) and onward door to the next gallery.
     const next = galleries[gi + 1]?.id ?? "main";
     doors.push({
       roomId: room.id, to: "main", x: 0, z: half, rotY: Math.PI, side: "back",
-      arrive: { x: 0, z: half - 4.4, yaw: Math.PI },
+      arrive: { x: 0, z: half - 3.2, yaw: Math.PI },
     });
     doors.push({
       roomId: room.id, to: next, x: 0, z: -half, rotY: 0, side: "front",
