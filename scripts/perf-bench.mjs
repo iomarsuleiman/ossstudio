@@ -143,6 +143,16 @@ results.push(await measure("teleport", async () => {
   await page.locator(".dialog .btn-primary").first().click();
   await page.waitForFunction((f) => window.__gallery.roomId !== f && window.__gallery.mode === "walk" && !document.querySelector(".teleport-veil"), from, { timeout: 30000 }).catch(() => {});
 }));
+// Back to the room you just left: it's still mounted, so this should be near-instant.
+results.push(await measure("teleport-back", async () => {
+  const from = await store(() => window.__gallery.roomId);
+  await page.keyboard.press("KeyM");
+  await page.waitForSelector(".map-node");
+  const title = await page.evaluate((id) => window.__content.rooms.find((r) => r.id === id).t.en.title, opt.room);
+  await page.locator(".map-node", { hasText: title }).first().click();
+  await page.locator(".dialog .btn-primary").first().click();
+  await page.waitForFunction((f) => window.__gallery.roomId !== f && window.__gallery.mode === "walk" && !document.querySelector(".teleport-veil"), from, { timeout: 30000 }).catch(() => {});
+}));
 results.push(await measure("idle-after", () => sleep(3000)));
 
 await browser.close();

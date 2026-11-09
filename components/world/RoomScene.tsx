@@ -9,6 +9,7 @@ import { rng } from "@/lib/painter";
 import type { WorldStore } from "@/lib/worldStore";
 import { UI } from "@/lib/i18n";
 import { Artwork } from "./Artwork";
+import { useRoomActive } from "./roomActive";
 import { Installation } from "./Installation";
 import { EntranceMap } from "./EntranceMap";
 import { ATMOSPHERE, FOG, glowMaterial, mix, paintMaterial, skyMaterial, waterMaterial, type Atmosphere } from "./paint";
@@ -39,7 +40,8 @@ function useCanvasTexture(make: () => HTMLCanvasElement, deps: unknown[]) {
 
 function Sky({ a }: { a: Atmosphere }) {
   const mat = useDisposable(() => skyMaterial(a), [a]);
-  useFrame(({ clock }) => { mat.uniforms.uTime.value = clock.elapsedTime; });
+  const active = useRoomActive();
+  useFrame(({ clock }) => { if (!active) return; mat.uniforms.uTime.value = clock.elapsedTime; });
   return (
     // Drawn after the opaque scenery, so the depth test skips every sky pixel
     // that a hill, arch or the walkway already covers.
@@ -51,7 +53,8 @@ function Sky({ a }: { a: Atmosphere }) {
 
 function Water({ a }: { a: Atmosphere }) {
   const mat = useDisposable(() => waterMaterial(a), [a]);
-  useFrame(({ clock }) => { mat.uniforms.uTime.value = clock.elapsedTime; });
+  const active = useRoomActive();
+  useFrame(({ clock }) => { if (!active) return; mat.uniforms.uTime.value = clock.elapsedTime; });
   return (
     <mesh material={mat} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.6, 0]} raycast={() => null}>
       <planeGeometry args={[400, 400]} />
@@ -129,7 +132,8 @@ function Portal({ door, content, locale, a }: { door: DoorPlacement; content: Ga
     () => paintSign(to.t[locale].title, to.id === "main" ? UI[locale].highlights : UI[locale].roomCount(count), locale, to.palette, 1024, 300),
     [to.id, locale, count],
   );
-  useFrame(({ clock }) => { fillMat.uniforms.uTime.value = clock.elapsedTime; });
+  const active = useRoomActive();
+  useFrame(({ clock }) => { if (!active) return; fillMat.uniforms.uTime.value = clock.elapsedTime; });
   // Gallery end portals sit at the end of the walkway; Main Hall portals line its sides.
   return (
     <group position={[door.x, 0, door.z]} rotation={[0, door.rotY, 0]}>
@@ -216,7 +220,9 @@ function DestinationMarker({ store, color }: { store: WorldStore; color: string 
   const ring = useRef<THREE.Mesh>(null);
   const mat = useRef<THREE.MeshBasicMaterial>(null);
   const shown = useRef(0);
+  const active = useRoomActive();
   useFrame(({ clock }, dt) => {
+    if (!active) return; // a hidden, recently visited room
     const d = store.destination;
     const on = d && store.mode === "walk" ? 1 : 0;
     shown.current += (on - shown.current) * (1 - Math.exp(-dt / 0.12));
@@ -333,7 +339,9 @@ function Monuments({ roomId, shape, a }: { roomId: RoomId; shape: RoomShape; a: 
   useEffect(() => () => { solidGeo?.dispose(); hillGeos.forEach((g) => g?.dispose()); }, [solidGeo, hillGeos]);
 
   const orbs = useRef<THREE.Group>(null);
+  const active = useRoomActive();
   useFrame(({ clock }) => {
+    if (!active) return; // a hidden, recently visited room
     orbs.current?.children.forEach((c, i) => { c.position.y = (c.userData.y as number) + Math.sin(clock.elapsedTime * 0.25 + i) * 0.6; });
   });
   return (
@@ -411,7 +419,9 @@ function Motes({ shape, color, store }: { shape: RoomShape; color: string; store
       }
     `,
   }), [color]);
+  const active = useRoomActive();
   useFrame(({ clock, gl }) => {
+    if (!active) return; // a hidden, recently visited room
     if (store.reducedMotion) return;
     mat.uniforms.uTime.value = clock.elapsedTime;
     mat.uniforms.uScale.value = size.height * 0.5 * gl.getPixelRatio();
@@ -453,8 +463,7 @@ export function RoomScene({
 
   return (
     <group>
-      <color attach="background" args={[a.horizon]} />
-      <fog attach="fog" args={[a.horizon, FOG.near, FOG.far]} />
+      {/* Background colour and fog are set for the whole scene by World (SceneAtmosphere). */}
       {/* Lights only touch the small sculptures; the world itself is unlit paint. */}
       <hemisphereLight args={[a.glow, a.water, 1.6]} />
       <directionalLight position={[4, 10, 6]} intensity={0.9} color={a.glow} />

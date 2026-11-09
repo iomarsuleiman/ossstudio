@@ -22,7 +22,7 @@ programs, JS heap, and main-thread time spent painting artworks.
 - `--mobile` emulates a Pixel 7; `--width/--height` set the window.
 - `--software-gl` is for machines without a GPU (absolute FPS is then very
   low; compare relative numbers only).
-- `--compare perf/baseline-software-gl.json` exits non-zero if draw calls,
+- `--compare perf/reference-software-gl.json` exits non-zero if draw calls,
   triangles, geometries, textures, shader programs or freezes grow more than
   15 % (hardware-independent budgets, safe to run in CI).
 
@@ -76,6 +76,7 @@ JavaScript in those windows is under 100 ms in total.
 | Artworks painted in a Web Worker | `OffscreenCanvas` in `lib/paint.worker.ts`, through a priority queue (the room you're in before prefetch). Browsers without it paint on the main thread one at a time with a yield in between. |
 | Only nearby rooms prepared | The room you're in plus the rooms you can walk to (the two nearest doors in the Main Hall, plus any door you approach). Everything else is released. |
 | Room switch as a React transition | Mounting a room can be spread over frames; the veil waits for the new room to be committed and painted (1.1 s ceiling). |
+| Recently visited rooms stay loaded | The last 4 rooms (3 on medium devices, 2 on phones) stay mounted but hidden, so going back is a visibility switch: no rebuild, no repainting, no texture uploads, and the veil lifts as soon as React commits. Hidden rooms add no draw calls and skip their per-frame animation; clicks and mouse look ignore them. The trade-off is GPU memory, roughly 50 MB of artwork textures per kept room, which is why phones keep fewer. |
 | Avatars share resources | Remote figures share geometry and materials; cloth animation only for the nearest 8; at most 40 drawn (24 on phones). |
 
 ## Budgets
@@ -92,8 +93,16 @@ targets to confirm on real devices of those classes:
 | Other visitors drawn | 40 (8 animated capes) | 40 | 24 |
 | Freezes (>100 ms) while walking | 0 | 0 | 0 |
 
-`npm run bench -- --compare perf/baseline-software-gl.json` enforces the
-hardware-independent ones.
+`npm run bench -- --compare perf/reference-software-gl.json` enforces the
+hardware-independent ones. (The first baseline, before any optimisation, is
+kept as `perf/baseline-software-gl.json` for the record; the reference has
+more live geometries and textures because recently visited rooms stay
+loaded.)
+
+Going back to the room you just left (`teleport-back` in the benchmark):
+2.5 s total with the veil animations versus 3.4 s for a fresh teleport on
+this machine, with 40 % less main-thread blocking (1.7 s vs 2.7 s of long
+tasks); most of what remains is the fixed veil animation.
 
 ## Status of the performance plan
 
@@ -106,13 +115,12 @@ hardware-independent ones.
 - Shared geometry and materials; merged static scenery; fewer segments; fewer material variants.
 - Quality tiers from device signals, refined by measured frame time with hysteresis; manual override via URL.
 - Artwork painting in a worker with a priority queue; only the current and reachable rooms are prepared; stale prefetch dropped when you move on.
-- Canvas and renderer kept alive across room changes; WebGL context loss handled without a reload.
+- Canvas and renderer kept alive across room changes; recently visited rooms stay mounted (hidden) so returning never rebuilds them; new rooms reuse cached materials and panel/frame geometry; WebGL context loss handled without a reload.
 - Map teleport loads the destination directly.
 - Simple invisible hit areas for sculptures; artwork details in DOM overlays, closed until clicked; proximity chat only for nearby visitors.
 - Convex: movement throttled and batched into room frames, interpolated locally, back-pressure instead of queues, chat isolated from the 3D scene (see `docs/MULTIPLAYER.md`).
 
 **Partly done**
-- *Never rebuild the scene tree on room change*: the room subtree still remounts, but its materials and panel/frame geometry now come from caches, and it mounts as a transition under the veil. Keeping recently visited rooms mounted but hidden is the next step if teleports still feel heavy on real devices.
 - *React rerenders vs Three.js*: chat, presence and HUD updates don't touch the canvas tree (they live in separate components and the world reads mutable stores), but there's no automated rerender counter yet.
 - *Spatial index for interactables*: rooms have ~20 artworks and ≤ 4 benches, so a linear scan per frame costs microseconds; revisit if rooms grow.
 

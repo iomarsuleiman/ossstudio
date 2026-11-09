@@ -5,6 +5,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { ExhibitPlacement, Motif } from "@/content";
 import { INSTALLATION_MOTIFS } from "@/content/layout";
+import { useRoomActive } from "./roomActive";
 
 // Small sculptural companions for selected Opening Collection pieces.
 // Each sits on the floor in front of its painting (or on the plinth for
@@ -49,7 +50,9 @@ function Piece({ motif, accent, trim }: { motif: Motif; accent: string; trim: st
   const reduced = useMemo(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const glowMat = useMemo(() => new THREE.MeshBasicMaterial({ color: accent, toneMapped: false }), [accent]);
 
+  const active = useRoomActive();
   useFrame(({ clock }) => {
+    if (!active) return; // a hidden, recently visited room
     if (reduced) return;
     const t = clock.elapsedTime;
     const g = ref.current;

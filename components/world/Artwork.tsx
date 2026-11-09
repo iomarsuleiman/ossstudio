@@ -9,6 +9,7 @@ import { paintPlaque } from "@/lib/painter";
 import type { WorldStore } from "@/lib/worldStore";
 import { mix, paintMaterial, type Atmosphere } from "./paint";
 import { frameGeometry, steleGeometry } from "./shapes";
+import { useRoomActive } from "./roomActive";
 
 const loader = new THREE.TextureLoader();
 
@@ -78,7 +79,9 @@ export function Artwork({
   }, [project.title, room.palette]);
   useEffect(() => () => plaque.dispose(), [plaque]);
 
+  const active = useRoomActive();
   useFrame((_, dt) => {
+    if (!active) return; // a hidden, recently visited room
     const near = store.nearby?.id === exhibit.id ? 1 : 0;
     glow.current += (near - glow.current) * (1 - Math.exp(-dt / 0.25));
     if (halo.current) {

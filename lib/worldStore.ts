@@ -69,6 +69,8 @@ export interface WorldStore {
   navigate?: (to: { x: number; z: number }) => boolean;
   /** Walk to a bench and sit on its nearest free seat. */
   sitOn?: (bench: number) => void;
+  /** Rooms currently mounted (current first); see World.tsx. */
+  loadedRooms: RoomId[];
   /** Visual quality tier (see lib/quality.ts). */
   quality: "high" | "medium" | "low";
   /** Other visitors are moving nearby, so keep drawing smoothly. */
@@ -106,6 +108,7 @@ export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, 
     texturesPending: 0,
     remoteActive: false,
     quality: "high",
+    loadedRooms: [],
     targetExhibit: null,
     nearby: null,
     linger: 0,

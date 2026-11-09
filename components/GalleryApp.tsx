@@ -228,6 +228,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     audio.sweep();
     queue?.prioritise((t) => t.key.startsWith(`art:${to}:`));
     const vt = supportsViewTransitions();
+    // A recently visited room is still mounted (hidden): switching back is instant.
+    const wasLoaded = store.loadedRooms.includes(to);
     startTransition(() => setVeil({ to }));
     // Kept short: the veil only needs to hide the swap, not make you wait.
     const cover = reduced ? 220 : 520;
@@ -259,9 +261,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       const startWait = performance.now();
       const reveal = () => {
         const waited = performance.now() - startWait;
-        const ready = committedRoom.current === to && store.texturesPending === 0 && destination.every((p) => isArtworkReady(p.slug));
+        const ready = committedRoom.current === to && (wasLoaded || (store.texturesPending === 0 && destination.every((p) => isArtworkReady(p.slug))));
         // Never reveal before the new room is actually on screen.
-        if (waited < 140 || (!ready && waited < 1100) || committedRoom.current !== to) { later(reveal, 50); return; }
+        if (waited < (wasLoaded ? 60 : 140) || (!ready && waited < 1100) || committedRoom.current !== to) { later(reveal, 50); return; }
         if (vt) startTransition(() => setVeil(null));
         else {
           setVeil({ to, leaving: true });
