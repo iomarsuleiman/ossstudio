@@ -93,4 +93,100 @@ export default defineSchema({
     featured: v.array(v.string()),
     soundtrack: v.string(),
   }),
+
+  // --- Multiplayer -----------------------------------------------------------
+  // Anonymous visitors. `token` is a secret the browser generates and keeps in
+  // localStorage; it proves who's who and is never returned by any query.
+  visitors: defineTable({
+    token: v.string(),
+    name: v.string(),
+    color: v.string(),
+    allowDMs: v.boolean(),
+    online: v.boolean(),
+    roomId,
+    lastActiveAt: v.number(),
+    lastChatAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_online_active", ["online", "lastActiveAt"]),
+
+  // Where each visitor currently is. Kept apart from `visitors` so that
+  // walking only wakes up the room it happens in.
+  presence: defineTable({
+    visitorId: v.id("visitors"),
+    roomId,
+    name: v.string(),
+    color: v.string(),
+    x: v.number(),
+    z: v.number(),
+    yaw: v.number(),
+    moving: v.boolean(),
+    /** "bench:seat" while seated. */
+    seat: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_visitor", ["visitorId"])
+    .index("by_updated", ["updatedAt"]),
+
+  // Live head counts, split into shards so simultaneous arrivals don't
+  // conflict on one document. A room's count is the sum of its shards.
+  roomCounts: defineTable({
+    roomId,
+    shard: v.number(),
+    count: v.number(),
+  }).index("by_room_shard", ["roomId", "shard"]),
+
+  // Room and gallery-wide chat. channel: "gallery" | "room:<roomId>".
+  messages: defineTable({
+    channel: v.string(),
+    visitorId: v.id("visitors"),
+    name: v.string(),
+    color: v.string(),
+    body: v.string(),
+  }).index("by_channel", ["channel"]),
+
+  // "Someone is typing…" for a chat channel or a private conversation ("dm:<id>").
+  typing: defineTable({
+    channel: v.string(),
+    visitorId: v.id("visitors"),
+    name: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_channel", ["channel"])
+    .index("by_visitor", ["visitorId"])
+    .index("by_expires", ["expiresAt"]),
+
+  // Private one-to-one conversations. `a` < `b` (by id) so each pair has one.
+  conversations: defineTable({
+    key: v.string(),
+    a: v.id("visitors"),
+    b: v.id("visitors"),
+    lastAt: v.number(),
+    lastFrom: v.id("visitors"),
+    lastBody: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_a", ["a", "lastAt"])
+    .index("by_b", ["b", "lastAt"]),
+
+  directMessages: defineTable({
+    conversationId: v.id("conversations"),
+    from: v.id("visitors"),
+    body: v.string(),
+  }).index("by_conversation", ["conversationId"]),
+
+  /** How far each participant has read a conversation. */
+  conversationReads: defineTable({
+    conversationId: v.id("conversations"),
+    visitorId: v.id("visitors"),
+    lastReadAt: v.number(),
+  }).index("by_conversation_visitor", ["conversationId", "visitorId"]),
+
+  blocks: defineTable({
+    blocker: v.id("visitors"),
+    blocked: v.id("visitors"),
+  })
+    .index("by_pair", ["blocker", "blocked"])
+    .index("by_blocked", ["blocked"]),
 });
