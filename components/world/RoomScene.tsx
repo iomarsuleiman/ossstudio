@@ -16,7 +16,7 @@ import { ATMOSPHERE, FOG, glowMaterial, mix, paintMaterial, skyMaterial, waterMa
 import { archShape, archTube, hillShape, slabGeometry } from "./shapes";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-export const INTRO_PANEL_INSET = 7.6;
+import { INTRO_PANEL_INSET } from "@/content/layout";
 const DOOR_W = 3.0;
 const DOOR_H = 4.4;
 
