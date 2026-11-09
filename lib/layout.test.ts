@@ -18,7 +18,23 @@ describe("gallery bench clearance", () => {
         }
       }
     }
-    const ai = content.shapes.find((s) => s.roomId === "ai");
-    expect(ai?.benches.some((b) => b.x > 0 && Math.abs(b.z - (ai.length / 2 - INTRO_PANEL_INSET)) < 2.5)).toBe(true);
+  });
+
+  it("provides back-to-back seating for every artwork bay in every gallery", () => {
+    const content = buildBundledContent();
+    for (const shape of content.shapes) {
+      if (shape.roomId === "main") {
+        expect(shape.benches).toHaveLength(4);
+        continue;
+      }
+      const bays = new Set(content.exhibits.filter((e) => e.roomId === shape.roomId).map((e) => e.z));
+      expect(shape.benches).toHaveLength(bays.size * 2);
+      for (const z of bays) {
+        expect(shape.benches.filter((b) => b.z === z)).toEqual([
+          { x: -0.32, z, rotY: -Math.PI / 2 },
+          { x: 0.32, z, rotY: Math.PI / 2 },
+        ]);
+      }
+    }
   });
 });
