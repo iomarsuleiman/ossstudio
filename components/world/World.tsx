@@ -8,6 +8,7 @@ import { RoomScene } from "./RoomScene";
 import { FirstPerson } from "./FirstPerson";
 import { Figure } from "./Figure";
 import { FrameDriver } from "./FrameDriver";
+import { MouseLook } from "./MouseLook";
 import { ATMOSPHERE } from "./atmosphere";
 
 export default function World({
@@ -38,6 +39,7 @@ export default function World({
       aria-hidden="true"
     >
       <FrameDriver store={store} />
+      <MouseLook store={store} />
       <group key={roomId}>
         <RoomScene
           content={content}

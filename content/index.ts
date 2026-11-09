@@ -8,6 +8,8 @@ import { layoutGallery, type ExhibitPlacement, type DoorPlacement, type RoomShap
 export type Locale = "en" | "ar";
 export const LOCALES: Locale[] = ["en", "ar"];
 export type { RoomId, Motif, CategoryCode, OpennessCode, ExhibitPlacement, DoorPlacement, RoomShape };
+export type { BenchPlacement } from "./layout";
+
 
 export interface ProjectText {
   oneLine: string;
@@ -61,7 +63,7 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export const CONTENT_REVISION = "2026-11-08.3";
+export const CONTENT_REVISION = "2026-11-09.1";
 
 /** Every catalogued project, including those not currently on display. */
 export function allProjects(): Project[] {

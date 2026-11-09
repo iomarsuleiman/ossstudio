@@ -35,7 +35,9 @@ export function FrameDriver({ store }: { store: WorldStore }) {
       const s = store;
       if (s.mode === "entering" || s.mode === "exiting" || s.mode === "transition") return true;
       if (s.enter > 0 && s.enter < 1) return true;
-      if (Math.hypot(s.vel.x, s.vel.z) > 0.01 || s.keys.size || s.joy.x || s.joy.y || s.target) return true;
+      if (Math.hypot(s.vel.x, s.vel.z) > 0.01 || s.keys.size || s.joy.x || s.joy.y || s.target || s.targetSeat) return true;
+      if (s.sitBlend !== (s.seat ? 1 : 0)) return true;
+      if (s.remoteActive) return true;
       if (Math.abs(s.targetYaw - s.yaw) > 1e-3 || Math.abs(s.targetPitch - s.pitch) > 1e-3) return true;
       if (Math.abs(s.viewBlend - (s.view === "third" ? 1 : 0)) > 1e-3) return true;
       return performance.now() - lastInput < 1200;

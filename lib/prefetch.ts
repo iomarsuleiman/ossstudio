@@ -1,7 +1,7 @@
-// Whole-site background preparation. Starts once the entrance is interactive,
-// never waits for hover or intent, and keeps going until every first-party
-// item has been attempted. Teleporting re-prioritises a room but never
-// cancels the queue.
+// Background preparation. Starts once the entrance is interactive and works
+// through what it's given: static assets, routes, and the artworks of the
+// room you're in plus the rooms you can walk to from it. Moving on drops
+// queued work for rooms that are no longer nearby (see `retain`).
 
 export interface PrefetchTask {
   key: string;
@@ -62,6 +62,18 @@ export class PrefetchQueue {
     this.sort();
     this.emit();
     this.pump();
+  }
+
+  /** Drop queued tasks that no longer match (e.g. artworks of rooms far away). */
+  retain(keep: (t: PrefetchTask) => boolean) {
+    const before = this.pending.length;
+    this.pending = this.pending.filter((t) => {
+      if (keep(t)) return true;
+      this.state.total--;
+      if (t.group === "artworks") this.state.artworksTotal--;
+      return false;
+    });
+    if (this.pending.length !== before) this.emit();
   }
 
   /** Move tasks whose key starts with `prefix` to the front (e.g. a room). */

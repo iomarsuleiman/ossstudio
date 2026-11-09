@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { DoorPlacement, GalleryContent, Locale, Room, RoomId, RoomShape } from "@/content";
+import type { BenchPlacement, DoorPlacement, GalleryContent, Locale, Room, RoomId, RoomShape } from "@/content";
 import { paintSign } from "@/lib/painter";
 import { rng } from "@/lib/painter";
 import type { WorldStore } from "@/lib/worldStore";
@@ -56,7 +56,7 @@ function Water({ a }: { a: Atmosphere }) {
   );
 }
 
-function Walkway({ shape, a, accent, onFloorClick }: { shape: RoomShape; a: Atmosphere; accent: string; onFloorClick: (x: number, z: number) => void }) {
+function Walkway({ shape, a, accent, store, onFloorClick }: { shape: RoomShape; a: Atmosphere; accent: string; store: WorldStore; onFloorClick: (x: number, z: number) => void }) {
   const geo = useDisposable(() => slabGeometry(shape.width + 0.6, shape.length + 0.6, Math.min(3, shape.width / 2.6)), [shape]);
   const mat = useDisposable(() => paintMaterial({ top: a.path, bottom: mix(a.water, a.monument, 0.4), fog: a.horizon, y0: -0.9, y1: 0.05, grain: 0.08, rimAmount: 0.2 }), [a]);
   const runnerGeo = useDisposable(() => new THREE.ShapeGeometry(archlessRunner(shape)), [shape]);
@@ -68,7 +68,8 @@ function Walkway({ shape, a, accent, onFloorClick }: { shape: RoomShape; a: Atmo
         material={mat}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, -0.55, 0]}
-        onClick={(e) => { if (e.delta > 6) return; e.stopPropagation(); onFloorClick(e.point.x, e.point.z); }}
+        userData={{ onActivate: (p: THREE.Vector3) => onFloorClick(p.x, p.z) }}
+        onClick={(e) => { if (e.delta > 6 || store.pointerLocked) return; e.stopPropagation(); onFloorClick(e.point.x, e.point.z); }}
       />
       <mesh geometry={runnerGeo} material={runnerMat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]} raycast={() => null} />
     </group>
@@ -174,19 +175,60 @@ function IntroPanel({ room, locale, shape, a }: { room: Room; locale: Locale; sh
   );
 }
 
-function Bench({ x, z, a }: { x: number; z: number; a: Atmosphere }) {
-  const mat = useDisposable(() => paintMaterial({ top: mix(a.monument, a.path, 0.3), bottom: a.monument, fog: a.horizon, y0: 0, y1: 0.6, rimAmount: 0.4, rim: a.glow }), [a]);
+function Bench({ bench, index, a, store }: { bench: BenchPlacement; index: number; a: Atmosphere; store: WorldStore }) {
+  const mat = useDisposable(() => paintMaterial({ top: mix(a.monument, a.path, 0.3), bottom: a.monument, fog: a.horizon, y0: 0, y1: 0.9, rimAmount: 0.4, rim: a.glow }), [a]);
+  const sit = () => store.sitOn?.(index);
   return (
-    <group position={[x, 0, z]}>
+    <group
+      position={[bench.x, 0, bench.z]}
+      rotation={[0, bench.rotY ?? Math.PI, 0]}
+      userData={{ onActivate: sit }}
+      onClick={(e) => { if (e.delta > 6 || store.pointerLocked) return; e.stopPropagation(); sit(); }}
+      onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
+      onPointerOut={() => { document.body.style.cursor = ""; }}
+    >
+      {/* Seat */}
       <mesh material={mat} position={[0, 0.46, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <capsuleGeometry args={[0.16, 1.7, 8, 24]} />
+        <capsuleGeometry args={[0.17, 1.74, 8, 24]} />
       </mesh>
-      {[-0.7, 0.7].map((dx) => (
+      {/* A low, soft backrest on the side away from the artwork. */}
+      <mesh material={mat} position={[0, 0.76, -0.2]} rotation={[0.18, 0, Math.PI / 2]} scale={[1, 1, 0.55]}>
+        <capsuleGeometry args={[0.09, 1.6, 6, 20]} />
+      </mesh>
+      {[-0.72, 0.72].map((dx) => (
         <mesh key={dx} material={mat} position={[dx, 0.2, 0]}>
           <cylinderGeometry args={[0.1, 0.16, 0.42, 24]} />
         </mesh>
       ))}
+      {/* Generous invisible hit area so the bench is easy to click. */}
+      <mesh position={[0, 0.5, 0]} visible={false}>
+        <boxGeometry args={[2.3, 1.1, 0.8]} />
+      </mesh>
     </group>
+  );
+}
+
+/** A soft ring on the floor where click-to-move is heading. */
+function DestinationMarker({ store, color }: { store: WorldStore; color: string }) {
+  const ring = useRef<THREE.Mesh>(null);
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const shown = useRef(0);
+  useFrame(({ clock }, dt) => {
+    const d = store.destination;
+    const on = d && store.mode === "walk" ? 1 : 0;
+    shown.current += (on - shown.current) * (1 - Math.exp(-dt / 0.12));
+    if (!ring.current || !mat.current) return;
+    ring.current.visible = shown.current > 0.02;
+    if (d) ring.current.position.set(d.x, 0.03, d.z);
+    const pulse = store.reducedMotion ? 1 : 1 + Math.sin(clock.elapsedTime * 4) * 0.08;
+    ring.current.scale.setScalar(pulse * (0.7 + shown.current * 0.3));
+    mat.current.opacity = shown.current * 0.75;
+  });
+  return (
+    <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} visible={false} raycast={() => null}>
+      <ringGeometry args={[0.22, 0.32, 40]} />
+      <meshBasicMaterial ref={mat} color={color} transparent opacity={0} depthWrite={false} toneMapped={false} />
+    </mesh>
   );
 }
 
@@ -380,7 +422,7 @@ export function RoomScene({
       <Water a={a} />
       <Monuments roomId={room.id} shape={shape} a={a} />
       {trees.map((t, i) => <Tree key={i} {...t} a={a} />)}
-      <Walkway shape={shape} a={a} accent={room.palette.accent} onFloorClick={onFloorClick} />
+      <Walkway shape={shape} a={a} accent={room.palette.accent} store={store} onFloorClick={onFloorClick} />
       {!isMain && <GateArches shape={shape} a={a} />}
       {!isMain && <IntroPanel room={room} locale={locale} shape={shape} a={a} />}
       {shape.sections?.map((sec) => <SectionArch key={sec.id} id={sec.id} z={sec.z} shape={shape} locale={locale} room={room} a={a} />)}
@@ -394,7 +436,8 @@ export function RoomScene({
         </>
       )}
       {doors.map((d) => <Portal key={`${d.side}${d.to}`} door={d} content={content} locale={locale} a={a} />)}
-      {shape.benches.map((b, i) => <Bench key={i} x={b.x} z={b.z} a={a} />)}
+      {shape.benches.map((b, i) => <Bench key={i} bench={b} index={i} a={a} store={store} />)}
+      <DestinationMarker store={store} color={a.glow} />
       <Motes shape={shape} color={a.glow} />
 
       {exhibits.map((e) => {

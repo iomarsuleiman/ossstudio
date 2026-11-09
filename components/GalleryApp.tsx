@@ -9,7 +9,7 @@ import { arrivalFor } from "@/content/layout";
 import { STATIC_ASSETS } from "@/content/assets";
 import { UI, dirOf } from "@/lib/i18n";
 import { getAudio } from "@/lib/audio";
-import { artworkUrl, isArtworkReady, roomFor } from "@/lib/artworks";
+import { artworkUrl, isArtworkReady, projectsShownIn, reachableRooms, releaseArtworks, roomFor } from "@/lib/artworks";
 import { PrefetchQueue, type PrefetchState } from "@/lib/prefetch";
 import { createWorldStore, loadVisit, saveVisit, type WorldStore } from "@/lib/worldStore";
 import { dominantColor } from "@/lib/painter";
@@ -102,7 +102,10 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const [openSlug, setOpenSlug] = useState<string | null>(start.exhibit ? start.exhibit.slug : null);
   const [panelLeaving, setPanelLeaving] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
-  const [nearby, setNearby] = useState<ExhibitPlacement | null>(null);
+  // The artwork whose details you asked for by clicking it (nothing opens by just walking up).
+  const [selected, setSelected] = useState<ExhibitPlacement | null>(null);
+  const [mouseLook, setMouseLook] = useState(false);
+  const [seated, setSeated] = useState(false);
   const [wash, setWash] = useState<Wash>({ phase: start.exhibit ? "in" : "idle", kind: "ink", color: start.exhibit ? dominantColor(roomFor(content, content.projects.find((p) => p.slug === start.exhibit!.slug)!)) : "#86394a" });
   const [sound, setSound] = useState(false);
   const [volume, setVolume] = useState(audio.volume);
@@ -192,13 +195,17 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     setMapOpen(false);
     store.mode = "transition";
     store.target = null;
+    store.path = [];
+    store.destination = null;
+    store.targetSeat = null;
     store.keys.clear();
     store.joy = { x: 0, y: 0 };
     audio.sweep();
     queue?.prioritise((t) => t.key.startsWith(`art:${to}:`));
     const vt = supportsViewTransitions();
     startTransition(() => setVeil({ to }));
-    const cover = reduced ? 250 : 950;
+    // Kept short: the veil only needs to hide the swap, not make you wait.
+    const cover = reduced ? 220 : 520;
     later(() => {
       store.roomId = to;
       store.pos = { x: pos.x, z: pos.z };
@@ -209,23 +216,28 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       store.nearMap = false;
       store.entering = null;
       store.enter = 0;
+      store.seat = null;
+      store.sitBlend = 0;
+      store.standFrom = null;
+      store.onSeatChange?.(null);
       store.snapCamera = true;
-      setNearby(null);
+      setSelected(null);
       setNearMap(false);
       setRoomId(to);
       window.history.replaceState(null, "", roomPath(locale, to));
-      // Lift the veil as soon as the destination's artworks are ready (no fake
-      // waiting), with a short floor so the room has drawn, and a ceiling.
-      const destination = content.projects.filter((p) => p.roomId === to);
+      // Lift the veil as soon as the destination's artworks are painted and
+      // uploaded (no fake waiting), with a short floor so the room has drawn
+      // a frame or two, and a ceiling so a slow device never waits long.
+      const destination = projectsShownIn(content, to);
       const startWait = performance.now();
       const reveal = () => {
         const waited = performance.now() - startWait;
-        const ready = destination.every((p) => isArtworkReady(p.slug));
-        if (waited < 200 || (!ready && waited < 2500)) { later(reveal, 100); return; }
+        const ready = store.texturesPending === 0 && destination.every((p) => isArtworkReady(p.slug));
+        if (waited < 140 || (!ready && waited < 1100)) { later(reveal, 50); return; }
         if (vt) startTransition(() => setVeil(null));
         else {
           setVeil({ to, leaving: true });
-          later(() => setVeil(null), cover);
+          later(() => setVeil(null), reduced ? 220 : 600);
         }
         store.mode = "walk";
         persist();
@@ -251,6 +263,10 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     store.mode = "entering";
     store.entering = e;
     store.target = null;
+    store.path = [];
+    store.destination = null;
+    setSelected(null);
+    if (document.pointerLockElement) document.exitPointerLock();
     audio.sweep();
     const project = content.projects.find((p) => p.slug === e.slug)!;
     later(() => setWash({ phase: "in", kind: "ink", color: dominantColor(roomFor(content, project)) }), T.enter * 0.6);
@@ -319,36 +335,82 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
 
   // --- world callbacks --------------------------------------------------------------
   useEffect(() => {
-    store.onNearby = (e) => { setNearby(e); if (e) audio.chime(); };
+    // Looking at an artwork only makes it glow softly; details open on click.
+    store.onNearby = () => {};
+    store.onArrive = (e) => { setSelected(e); audio.chime(); };
+    store.onSeatChange = (seat) => { setSeated(!!seat); if (seat) setSelected(null); };
+    store.onNearDoor = (to) => {
+      setNearDoor(to);
+      // Paint the next room's artworks before you reach the door.
+      queue?.prioritise((t) => t.key.startsWith(`art:${to}:`));
+      projectsShownIn(content, to).forEach((p) => { artworkUrl(p, roomFor(content, p)).catch(() => {}); });
+    };
     store.onDoor = onDoor;
     store.onStep = () => audio.footstep();
     store.onNearMap = (near) => setNearMap(near);
-  }, [store, audio, onDoor]);
+  }, [store, audio, onDoor, content]);
 
   const onExhibitClick = useCallback((id: string) => {
     const e = content.exhibits.find((x) => x.id === id);
     if (!e || store.mode !== "walk") return;
-    const close = store.nearby?.id === e.id || Math.hypot(e.spawn.x - store.pos.x, e.spawn.z - store.pos.z) < 1.2;
-    if (close) openExhibit(e);
-    else {
-      // Glide to the viewing spot, turning gracefully to face the artwork.
-      store.target = { x: e.spawn.x, z: e.spawn.z };
+    const c = { x: e.x + Math.sin(e.rotY) * 0.5, z: e.z + Math.cos(e.rotY) * 0.5 };
+    const close = Math.hypot(c.x - store.pos.x, c.z - store.pos.z) < 3.4;
+    // Seated, or already close: show its details right where you are.
+    if (close || store.seat) { setSelected(e); audio.chime(); return; }
+    // Otherwise walk to its viewing spot (around benches and sculptures),
+    // turn to face it, then show its details.
+    if (store.navigate?.({ x: e.spawn.x, z: e.spawn.z })) {
       store.targetExhibit = e.id;
+      store.targetSeat = null;
       store.targetYaw = yawToward(e.spawn, e);
       store.targetPitch = 0;
-    }
-  }, [content, store, openExhibit]);
+    } else { setSelected(e); audio.chime(); }
+  }, [content, store, audio]);
 
   const onFloorClick = useCallback((x: number, z: number) => {
     if (store.mode !== "walk") return;
     store.targetExhibit = null;
+    store.targetSeat = null;
+    if (store.seat) { store.seat = null; store.onSeatChange?.(null); }
     const d = content.doors.find((d) => d.roomId === store.roomId && Math.hypot(d.x - x, d.z - z) < 1.8);
     if (d) {
+      // Walk up to the doorway, then straight through it.
       const out = { left: [-1, 0], right: [1, 0], front: [0, -1], back: [0, 1] }[d.side];
-      store.target = { x: d.x + out[0], z: d.z + out[1] };
-    } else store.target = { x, z };
-    store.targetYaw = Math.atan2(store.target.x - store.pos.x, store.target.z - store.pos.z);
+      if (store.navigate?.({ x: d.x - out[0] * 0.6, z: d.z - out[1] * 0.6 })) store.path.push({ x: d.x + out[0], z: d.z + out[1] });
+      else store.target = { x: d.x + out[0], z: d.z + out[1] };
+      if (store.path.length) store.destination = { x: d.x, z: d.z };
+    } else store.navigate?.({ x, z });
   }, [content, store]);
+
+  const toggleMouseLook = useCallback(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>(".world-canvas canvas");
+    if (document.pointerLockElement) { document.exitPointerLock(); return; }
+    if (!canvas?.requestPointerLock) return;
+    try {
+      const r = canvas.requestPointerLock() as unknown;
+      if (r instanceof Promise) r.catch(() => {});
+    } catch { /* not allowed here (e.g. in a sandboxed frame) */ }
+  }, []);
+  useEffect(() => {
+    const change = () => {
+      const on = !!document.pointerLockElement;
+      store.pointerLocked = on;
+      setMouseLook(on);
+      if (!on) store.targetPitch = Math.max(-0.6, Math.min(0.45, store.targetPitch));
+    };
+    document.addEventListener("pointerlockchange", change);
+    return () => document.removeEventListener("pointerlockchange", change);
+  }, [store]);
+
+  // Walking well away from the artwork you clicked puts its card away.
+  useEffect(() => {
+    if (!selected) return;
+    const id = window.setInterval(() => {
+      const c = { x: selected.x, z: selected.z };
+      if (Math.hypot(c.x - store.pos.x, c.z - store.pos.z) > 7.5 || store.roomId !== selected.roomId) setSelected(null);
+    }, 300);
+    return () => clearInterval(id);
+  }, [selected, store]);
 
   // --- keyboard -------------------------------------------------------------------------
   useEffect(() => {
@@ -357,14 +419,19 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (openSlug) { if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); closeExhibit(); } return; }
       if (mapOpen || shelfOpen || checkout || !entered) return;
-      const move = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+      // W A S D only; the arrow keys are left alone (for scrolling and screen readers).
+      const move = ["KeyW", "KeyA", "KeyS", "KeyD"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
+      if (e.code === "Escape" && selected) { e.preventDefault(); setSelected(null); return; }
+      if (e.code === "KeyL") { e.preventDefault(); toggleMouseLook(); return; }
       if (e.code === "KeyM") { e.preventDefault(); setMapOpen(true); return; }
       if (e.code === "KeyV") { e.preventDefault(); toggleView(); return; }
-      if (e.code === "KeyC" && store.nearby) { e.preventDefault(); collection.toggle(store.nearby.slug); return; }
+      const focus = selected ?? store.nearby;
+      if (e.code === "KeyC" && focus) { e.preventDefault(); collection.toggle(focus.slug); return; }
       const onButton = e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement;
+      // E (or Enter) is an explicit "interact": step into the artwork you're looking at.
       if (e.code === "KeyE" || (e.key === "Enter" && !onButton)) {
-        if (store.nearby) { e.preventDefault(); openExhibit(store.nearby); }
+        if (focus) { e.preventDefault(); openExhibit(focus); }
         else if (store.nearMap) { e.preventDefault(); setMapOpen(true); }
       }
     };
@@ -374,11 +441,15 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
-  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit]);
+  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook]);
 
   useEffect(() => {
     const paused = mapOpen || shelfOpen || !!checkout;
-    if (paused) { store.keys.clear(); store.joy = { x: 0, y: 0 }; if (store.mode === "walk") store.mode = "transition"; }
+    if (paused) {
+      store.keys.clear(); store.joy = { x: 0, y: 0 };
+      if (store.mode === "walk") store.mode = "transition";
+      if (document.pointerLockElement) document.exitPointerLock();
+    }
     else if (store.mode === "transition" && wash.phase === "idle" && !veil && entered && !openSlug) store.mode = "walk";
   }, [mapOpen, shelfOpen, checkout, store, wash.phase, veil, entered, openSlug]);
 
@@ -433,7 +504,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     router.push(path + window.location.search);
   };
 
-  // --- whole-site prefetch (starts as soon as the entrance is interactive) ----------
+  // --- background preparation (starts as soon as the entrance is interactive) ----
+  // Only the room you're in and the rooms you can walk to from it are painted
+  // ahead of time; everything else is released and painted again on demand.
   useEffect(() => {
     if (!ready) return;
     if (!queue) {
@@ -445,18 +518,47 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         ...STATIC_ASSETS.map((a) => ({ key: `asset:${a.key}`, group: "assets" as const, priority: a.priority, run: () => fetch(a.url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); }) })),
         { key: "route:index", group: "routes", priority: 1, run: async () => router.prefetch(`/${locale}/list`) },
         { key: "route:locale", group: "routes", priority: 1, run: async () => router.prefetch(`/${other}`) },
-        ...content.projects.map((p) => {
-          const home = roomFor(content, p);
-          const dist = home.id === store.roomId ? 0 : Math.abs(home.order - (content.rooms.find((r) => r.id === store.roomId)?.order ?? 0));
-          return { key: `art:${home.id}:${p.slug}`, group: "artworks" as const, priority: 2 + dist + (p.openingOrder ? 0 : 0.5), run: () => artworkUrl(p, home) };
-        }),
       ]);
     }
     return queue.subscribe(setPrefetch);
-  }, [ready, content, locale, router, store]);
+  }, [ready, locale, router]);
+
+  // Progress for what's nearby: "12 of 30 nearby artworks ready".
+  const [scope, setScope] = useState<string[]>([]);
+  // The room behind the door you're walking toward joins what's prepared.
+  const [nearDoor, setNearDoor] = useState<RoomId | null>(null);
+  const queuedArt = useRef(new Set<string>());
+  useEffect(() => {
+    if (!ready || !queue) return;
+    // The Main Hall has a door to every room, so there only the two nearest
+    // doors (plus any door you walk up to) count as "where you can go".
+    const reach = reachableRooms(content, roomId, store.pos).slice(0, 2);
+    if (nearDoor && nearDoor !== roomId && !reach.includes(nearDoor) && content.doors.some((d) => d.roomId === roomId && d.to === nearDoor)) reach.push(nearDoor);
+    const nearby = [roomId, ...reach];
+    const slugs = new Set<string>();
+    const tasks: Parameters<PrefetchQueue["add"]>[0] = [];
+    nearby.forEach((rid, distance) => {
+      for (const p of projectsShownIn(content, rid)) {
+        if (slugs.has(p.slug)) continue;
+        slugs.add(p.slug);
+        const key = `art:${rid}:${p.slug}`;
+        if (queuedArt.current.has(p.slug) && isArtworkReady(p.slug)) continue;
+        queuedArt.current.add(p.slug);
+        tasks.push({ key, group: "artworks", priority: 2 + distance * 0.1, run: () => artworkUrl(p, roomFor(content, p)) });
+      }
+    });
+    // Forget rooms you can no longer walk to, then queue what's nearby.
+    queue.retain((t) => t.group !== "artworks" || slugs.has(t.key.split(":")[2]));
+    for (const slug of [...queuedArt.current]) if (!slugs.has(slug)) queuedArt.current.delete(slug);
+    releaseArtworks(slugs);
+    queue.add(tasks);
+    setScope([...slugs]);
+  }, [ready, roomId, content, store, nearDoor]);
+
+  const scopeReady = scope.filter((s) => isArtworkReady(s)).length;
 
   // --- render --------------------------------------------------------------------------
-  const nearbyProject = nearby ? content.projects.find((p) => p.slug === nearby.slug) : null;
+  const selectedProject = selected ? content.projects.find((p) => p.slug === selected.slug) : null;
   const showHud = entered && !openSlug;
 
   return (
@@ -533,6 +635,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
                 {view === "third" ? ui.viewFirst : ui.viewSide}
               </button>
             )}
+            {!touch && (
+              <button type="button" className="btn btn-glass" onClick={toggleMouseLook} aria-pressed={mouseLook} aria-keyshortcuts="L">
+                {ui.mouseLook}
+              </button>
+            )}
             <Link className="btn btn-glass" href={`/${locale}/list`}>{ui.index}</Link>
           </nav>
         </header>
@@ -541,28 +648,24 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       {showHud && (
         <div className="hud-bottom">
           <div className="nearby" aria-live="polite">
-            {!nearbyProject && nearMap && (
-              <div className="nearby-card" key="map">
-                <p className="nearby-title">{ui.mapTitle}</p>
-                <p className="nearby-line">{ui.entranceMapHint}</p>
-                <button type="button" className="btn btn-primary" onClick={() => setMapOpen(true)} aria-keyshortcuts="E">
-                  {ui.openMap}
-                  {!touch && <span className="kbd" aria-hidden="true">E</span>}
-                </button>
-              </div>
+            {!selectedProject && nearMap && (
+              <button type="button" className="hint-chip" key="map" onClick={() => setMapOpen(true)} aria-keyshortcuts="E">
+                {!touch && <span className="kbd kbd-dark" aria-hidden="true">E</span>} {ui.openMap}
+              </button>
             )}
-            {nearbyProject && nearby && (
-              <div className="nearby-card" key={nearby.id}>
-                <p className="nearby-title"><bdi>{nearbyProject.title}</bdi></p>
-                <p className="nearby-line">{nearbyProject.t[locale]?.oneLine}</p>
+            {selectedProject && selected && (
+              <div className="nearby-card" key={selected.id} role="dialog" aria-label={selectedProject.title}>
+                <button type="button" className="card-close" onClick={() => setSelected(null)} aria-label={ui.close}>×</button>
+                <p className="nearby-title"><bdi>{selectedProject.title}</bdi></p>
+                <p className="nearby-line">{selectedProject.t[locale]?.oneLine}</p>
                 <div className="nearby-actions">
-                  <button type="button" className="btn btn-primary" onClick={() => openExhibit(nearby)} aria-keyshortcuts="E">
+                  <button type="button" className="btn btn-primary" onClick={() => openExhibit(selected)} aria-keyshortcuts="E">
                     {ui.enterArtwork}
                     {!touch && <span className="kbd" aria-hidden="true">E</span>}
                   </button>
-                  <CollectButton slug={nearbyProject.slug} locale={locale} />
+                  <CollectButton slug={selectedProject.slug} locale={locale} />
                 </div>
-                {nearbyProject.comingSoon && <p className="placard-soon">{ui.comingSoon}</p>}
+                {selectedProject.comingSoon && <p className="placard-soon">{ui.comingSoon}</p>}
               </div>
             )}
           </div>
@@ -573,6 +676,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       )}
 
       {showHud && touch && !mapOpen && <Joystick store={store} label={ui.joystick} />}
+      {showHud && mouseLook && <div className="crosshair" aria-hidden="true" />}
+      {showHud && mouseLook && hint && <p className="mouse-look-hint" role="note">{ui.mouseLookHint}</p>}
+      {showHud && seated && <p className="seated-hint" role="status">{touch ? ui.seatedTouch : ui.seatedDesktop}</p>}
 
       {veil && (() => {
         const dest = content.rooms.find((r) => r.id === veil.to)!;
@@ -599,9 +705,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         );
       })()}
 
-      {prefetch && entered && !openSlug && !(prefetch.finished && !hint) && (
+      {prefetch && entered && !openSlug && scope.length > 0 && !(scopeReady === scope.length && !hint) && (
         <p className="prefetch" aria-live="off">
-          {prefetch.finished ? ui.prefetchDone : ui.prefetch(prefetch.artworksDone, prefetch.artworksTotal)}
+          {scopeReady === scope.length ? ui.prefetchDone : ui.prefetch(scopeReady, scope.length)}
           {prefetch.paused && !prefetch.finished && (
             <> · {ui.prefetchPaused} <button type="button" className="link" onClick={() => queue?.resume()}>{ui.resume}</button></>
           )}

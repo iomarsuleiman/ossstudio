@@ -43,7 +43,7 @@ export default defineSchema({
     shape: v.object({
       width: v.number(),
       length: v.number(),
-      benches: v.array(v.object({ x: v.number(), z: v.number() })),
+      benches: v.array(v.object({ x: v.number(), z: v.number(), rotY: v.optional(v.number()) })),
       sections: v.optional(v.array(v.object({ id: v.union(v.literal("linux"), v.literal("inventions")), z: v.number() }))),
     }),
   }).index("by_roomId", ["roomId"]),

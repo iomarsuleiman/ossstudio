@@ -49,6 +49,10 @@ export function Artwork({
   useEffect(() => {
     let alive = true;
     let loaded: THREE.Texture | null = null;
+    // Counted so a teleport can lift its veil as soon as the room is fully painted.
+    let pending = true;
+    store.texturesPending++;
+    const done = () => { if (pending) { pending = false; store.texturesPending--; } };
     artworkUrl(project, home).then((url) => {
       if (!alive) return;
       loader.load(url, (t) => {
@@ -57,13 +61,15 @@ export function Artwork({
         t.anisotropy = 4;
         loaded = t;
         setTex(t);
-      });
-    });
+        done();
+      }, undefined, done);
+    }, done);
     return () => {
       alive = false;
+      done();
       loaded?.dispose();
     };
-  }, [project, home]);
+  }, [project, home, store]);
 
   const plaque = useMemo(() => {
     const t = new THREE.CanvasTexture(paintPlaque(project.title, room.palette));
@@ -103,7 +109,8 @@ export function Artwork({
     <group position={[exhibit.x, exhibit.y, exhibit.z]} rotation={[0, exhibit.rotY, 0]}>
       <group
         ref={group}
-        onClick={(e) => { if (e.delta > 6) return; e.stopPropagation(); onClick(); }}
+        userData={{ onActivate: onClick }}
+        onClick={(e) => { if (e.delta > 6 || store.pointerLocked) return; e.stopPropagation(); onClick(); }}
         onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { document.body.style.cursor = ""; }}
       >
