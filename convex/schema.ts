@@ -128,8 +128,35 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_room", ["roomId"])
+    .index("by_room_updated", ["roomId", "updatedAt"])
+    .index("by_room_seat", ["roomId", "seat"])
     .index("by_visitor", ["visitorId"])
     .index("by_updated", ["updatedAt"]),
+
+  // Batched room view: a ticker folds everyone's movement into one compact
+  // frame per room every 0.5–1 s. Clients subscribe to this, never to the
+  // presence rows, so a room's traffic no longer grows with every step taken.
+  roomFrames: defineTable({
+    roomId,
+    /** JSON array of [id, name, colour, x, z, yaw, moving, seat, t, open]. */
+    data: v.string(),
+    count: v.number(),
+    at: v.number(),
+  }).index("by_room", ["roomId"]),
+
+  /** Someone left a room (left, moved on, or timed out): the ticker removes them from its frame. */
+  departures: defineTable({
+    roomId,
+    visitorId: v.id("visitors"),
+    at: v.number(),
+  }).index("by_at", ["at"]),
+
+  /** The single ticker's bookkeeping; `gen` makes sure only one ticker loop runs. */
+  ticker: defineTable({
+    gen: v.number(),
+    lastTick: v.number(),
+    aliveAt: v.number(),
+  }),
 
   // Live head counts, split into shards so simultaneous arrivals don't
   // conflict on one document. A room's count is the sum of its shards.

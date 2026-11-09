@@ -678,3 +678,7 @@ button { font: inherit; color: inherit; }
 .people-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
 .map-node-count { font-size: 0.8em; color: #4f7a40; font-weight: 700; }
 .map-room-count { margin: 4px 0 0; color: #4f7a40; font-weight: 600; }
+.perf-overlay {
+  position: absolute; z-index: 60; top: 50%; left: 8px; margin: 0; padding: 6px 8px; border-radius: 8px;
+  background: rgba(20, 16, 16, 0.72); color: #e9f5e0; font: 11px/1.45 ui-monospace, monospace; pointer-events: none;
+}

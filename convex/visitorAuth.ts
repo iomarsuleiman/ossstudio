@@ -75,3 +75,20 @@ export function sendIntervalFor(peopleInRoom: number) {
   if (peopleInRoom <= 150) return 800;
   return 1200;
 }
+
+// --- Batched room frames ----------------------------------------------------------
+
+/** How often the ticker folds movement into room frames, given how many people are online. */
+export function tickIntervalFor(online: number) {
+  return online <= 300 ? 500 : 1000;
+}
+
+/** How many people a room frame carries (the most recently active first). */
+export function frameCapFor(peopleInRoom: number) {
+  return peopleInRoom <= 150 ? 120 : 80;
+}
+
+/** Ticker writes look this far into the past so they never race in-flight movement writes. */
+export const TICK_LAG_MS = 250;
+
+export type FrameRow = [id: string, name: string, color: string, x: number, z: number, yaw: number, moving: 0 | 1, seat: string | null, t: number, open: 0 | 1];

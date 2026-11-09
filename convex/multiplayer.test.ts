@@ -1,10 +1,15 @@
 // @vitest-environment edge-runtime
+/// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { roomView } from "./frames.testutil";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 
 const modules = import.meta.glob("./**/*.ts");
+
+beforeEach(() => { vi.useFakeTimers(); });
+afterEach(() => { vi.useRealTimers(); });
 const token = (n: number) => `test-token-${n}-abcdefghijklmnop`;
 const at = { x: 0, z: 0, yaw: 0 };
 
@@ -20,8 +25,8 @@ describe("presence", () => {
     const { t, people } = await setup(3);
     expect(new Set(people.map((p) => p.visitorId)).size).toBe(3);
     expect(await t.query(api.presence.counts, {})).toEqual({ total: 3, rooms: { art: 3 } });
-    expect(await t.query(api.presence.inRoom, { roomId: "art" })).toHaveLength(3);
-    expect(await t.query(api.presence.inRoom, { roomId: "main" })).toHaveLength(0);
+    expect(await roomView(t, "art")).toHaveLength(3);
+    expect(await roomView(t, "main")).toHaveLength(0);
   });
 
   it("rejoining with the same token is the same visitor and doesn't double count", async () => {
@@ -42,7 +47,7 @@ describe("presence", () => {
   it("records movement compactly", async () => {
     const { t } = await setup(1);
     await t.mutation(api.presence.move, { token: token(0), x: 1.23456, z: -2.5, yaw: 0.5, moving: true });
-    const [p] = await t.query(api.presence.inRoom, { roomId: "art" });
+    const [p] = await roomView(t, "art");
     expect(p).toMatchObject({ x: 1.23, z: -2.5, y: 0.5, m: true, s: null });
   });
 
@@ -81,6 +86,40 @@ describe("presence", () => {
     const { t } = await setup(1);
     await expect(t.mutation(api.presence.move, { token: "nobody-nobody-nobody-xx", ...at, moving: false })).rejects.toThrow();
     await expect(t.mutation(api.presence.join, { token: token(9), roomId: "attic", ...at })).rejects.toThrow();
+  });
+});
+
+describe("room frames (the ticker)", () => {
+  it("adds arrivals, removes departures and follows room changes", async () => {
+    const { t } = await setup(3);
+    expect(await roomView(t, "art")).toHaveLength(3);
+    await t.mutation(api.presence.leave, { token: token(0) });
+    await t.mutation(api.presence.changeRoom, { token: token(1), roomId: "ai", ...at });
+    expect((await roomView(t, "art")).map((r) => r.id)).toHaveLength(1);
+    expect(await roomView(t, "ai")).toHaveLength(1);
+  });
+
+  it("only rewrites a frame when something in that room changed", async () => {
+    const { t } = await setup(2);
+    await roomView(t, "art");
+    const before = await t.query(api.presence.frame, { roomId: "art" });
+    await t.mutation(api.presence.join, { token: token(9), roomId: "ai", ...at });
+    await roomView(t, "ai");
+    expect((await t.query(api.presence.frame, { roomId: "art" })).at).toBe(before.at);
+    await t.mutation(api.presence.move, { token: token(0), x: 3, z: 3, yaw: 0, moving: true });
+    await roomView(t, "art");
+    expect((await t.query(api.presence.frame, { roomId: "art" })).at).toBeGreaterThan(before.at);
+  });
+
+  it("runs a single ticker loop", async () => {
+    const t = convexTest(schema, modules);
+    expect(await t.mutation(internal.presence.ensureTicker, {})).toMatchObject({ started: true, gen: 1 });
+    expect(await t.mutation(internal.presence.ensureTicker, {})).toMatchObject({ started: false });
+    // A superseded loop stops itself.
+    vi.setSystemTime(Date.now() + 10_000);
+    expect(await t.mutation(internal.presence.ensureTicker, {})).toMatchObject({ started: true, gen: 2 });
+    expect(await t.action(internal.presence.tick, { gen: 1, once: true })).toEqual({ stopped: true });
+    expect((await t.action(internal.presence.tick, { gen: 2, once: true })).stopped).toBe(false);
   });
 });
 
@@ -184,7 +223,7 @@ describe("private messages", () => {
   it("renames visitors everywhere they show", async () => {
     const { t } = await setup(1);
     await t.mutation(api.presence.setProfile, { token: token(0), name: "  Mona   Lisa  " });
-    const [p] = await t.query(api.presence.inRoom, { roomId: "art" });
+    const [p] = await roomView(t, "art");
     expect(p.n).toBe("Mona Lisa");
     await expect(t.mutation(api.presence.setProfile, { token: token(0), name: " " })).rejects.toThrow();
   });

@@ -23,6 +23,7 @@ import { GiftShop } from "./GiftShop";
 import { collection, useCollection } from "@/lib/collection";
 import { NetStore } from "@/lib/multiplayer/net";
 import { MultiplayerLayer, type ChatRequest } from "./multiplayer/MultiplayerLayer";
+import { PerfOverlay } from "./multiplayer/PerfOverlay";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
 
@@ -183,10 +184,14 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // `?debug` exposes the world state for automated walk-through tests.
+  // `?debug` exposes the world state for automated walk-through tests and shows performance numbers.
+  const [debug, setDebug] = useState(false);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has("debug")) (window as unknown as { __gallery: WorldStore }).__gallery = store;
-  }, [store]);
+    if (!new URLSearchParams(window.location.search).has("debug")) return;
+    (window as unknown as { __gallery: WorldStore; __net: NetStore }).__gallery = store;
+    (window as unknown as { __net: NetStore }).__net = net;
+    setDebug(true);
+  }, [store, net]);
 
   // --- persistence (keeps your place across language switches & reloads) ----
   const persist = useCallback(() => {
@@ -754,6 +759,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         </div>
       )}
 
+      {debug && <PerfOverlay net={net} />}
       <MultiplayerLayer
         net={net}
         store={store}

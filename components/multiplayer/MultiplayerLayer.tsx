@@ -207,14 +207,16 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
   }, [me, convex, net]);
 
   // --- receiving -----------------------------------------------------------------------------
-  const rows = useQuery(api.presence.inRoom, me ? { roomId } : "skip");
+  // The room arrives as the server ticker's compact frame (≤ 2 per second).
+  const frame = useQuery(api.presence.frame, me ? { roomId } : "skip");
   useEffect(() => {
-    if (!rows || !me) return;
-    net.ingest(rows as RemoteRow[], JSON.stringify(rows).length);
+    if (!frame || !me) return;
+    let parsed: unknown[][] = [];
+    try { parsed = JSON.parse(frame.data) as unknown[][]; } catch { return; }
+    const rows: RemoteRow[] = parsed.map(([id, n, c, x, z, y, m, s, t, o]) => ({ id: id as string, n: n as string, c: c as string, x: x as number, z: z as number, y: y as number, m: !!m, s: (s as string | null) ?? null, t: t as number, o: !!o }));
+    net.ingest(rows, frame.data.length);
     store.takenSeats = new Set(rows.filter((r) => r.id !== me.id && r.s).map((r) => r.s!));
-    // Remote visitors are drawn a little in the past; match it to how often they send.
-    net.delay = Math.min(900, Math.max(220, interval.current * 1.6));
-  }, [rows, me, net, store]);
+  }, [frame, me, net, store]);
 
   const counts = useQuery(api.presence.counts, entered ? {} : "skip");
   useEffect(() => { if (counts) net.setCounts(counts); }, [counts, net]);

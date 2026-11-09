@@ -53,8 +53,10 @@ export class NetStore {
   hidden = new Set<string>();
   /** Estimated (local clock - server clock) from the fastest recent update. */
   private offset: number | null = null;
-  /** How far in the past remote visitors are drawn, ms. */
-  delay = 260;
+  /** How far in the past remote visitors are drawn, ms (follows the frame cadence). */
+  delay = 700;
+  private lastIngest = 0;
+  private cadence = 500;
   /** Updates received per second (for the debug overlay and load tests). */
   stats = { updates: 0, bytes: 0, lastSecondUpdates: 0, lastSecondBytes: 0, windowStart: 0 };
   private listeners = new Set<() => void>();
@@ -73,6 +75,10 @@ export class NetStore {
   ingest(rows: RemoteRow[], sizeBytes: number) {
     const now = performance.now();
     this.trackStats(now, sizeBytes);
+    // Frames come every 0.5–1 s; draw far enough behind to always have the next one.
+    if (this.lastIngest) this.cadence += (Math.min(3000, now - this.lastIngest) - this.cadence) * 0.2;
+    this.lastIngest = now;
+    this.delay = Math.max(300, Math.min(1600, this.cadence * 1.4 + 150));
     const seen = new Set<string>();
     let membershipChanged = false;
     for (const row of rows) {
