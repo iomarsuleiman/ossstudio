@@ -12,8 +12,8 @@ import type { Atmosphere } from "./paint";
 // tag, and a 💬 bubble above anyone close enough to talk to. Only the nearest
 // MAX_DRAWN are drawn so a crowded room stays smooth.
 
-const MAX_DRAWN = 40;
-const DETAILED = 12;
+const MAX_DRAWN = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches ? 24 : 40;
+const DETAILED = 8;
 export const CHAT_RANGE = 3.5;
 
 function nameTexture(name: string, color: string) {

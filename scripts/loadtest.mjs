@@ -171,8 +171,12 @@ function bot(i, connect) {
 
 async function measureBrowser(url, ms) {
   let chromium;
-  try { ({ chromium } = await import("playwright")); } catch { console.warn("playwright not available; skipping --browser"); return null; }
-  const browser = await chromium.launch();
+  try {
+    const { createRequire } = await import("node:module");
+    ({ chromium } = createRequire(import.meta.url)("playwright"));
+  } catch { console.warn("playwright not available; skipping --browser"); return null; }
+  // LOADTEST_SOFTWARE_GL=1 for machines without a GPU (numbers are then much lower).
+  const browser = await chromium.launch({ args: process.env.LOADTEST_SOFTWARE_GL ? ["--use-gl=swiftshader", "--enable-unsafe-swiftshader"] : [] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await page.goto(url + (url.includes("?") ? "&" : "?") + "debug", { waitUntil: "load" });
   await page.getByRole("button").filter({ hasText: /Enter quietly|ادخل بهدوء/ }).click();
