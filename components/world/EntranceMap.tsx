@@ -8,6 +8,7 @@ import { cssFont } from "@/lib/painter";
 import { UI } from "@/lib/i18n";
 import type { WorldStore } from "@/lib/worldStore";
 import { ATMOSPHERE, mix, paintMaterial } from "./paint";
+import { useRoomActive } from "./roomActive";
 
 // A large painted map on a pedestal in the centre of the Main Hall. Each room
 // floats above it as a glowing orb: touch or click one to travel there.
@@ -106,7 +107,9 @@ function Orb({ roomId, x, y, onPick }: { roomId: RoomId; x: number; y: number; o
   const ref = useRef<THREE.Group>(null);
   const [hover, setHover] = useState(false);
   const seed = useMemo(() => x * 7 + y * 3, [x, y]);
+  const active = useRoomActive();
   useFrame(({ clock }, dt) => {
+    if (!active) return; // a hidden, recently visited room
     const g = ref.current;
     if (!g) return;
     g.position.z = 0.13 + Math.sin(clock.elapsedTime * 0.9 + seed) * 0.03;

@@ -43,7 +43,7 @@ export default defineSchema({
     shape: v.object({
       width: v.number(),
       length: v.number(),
-      benches: v.array(v.object({ x: v.number(), z: v.number() })),
+      benches: v.array(v.object({ x: v.number(), z: v.number(), rotY: v.optional(v.number()) })),
       sections: v.optional(v.array(v.object({ id: v.union(v.literal("linux"), v.literal("inventions")), z: v.number() }))),
     }),
   }).index("by_roomId", ["roomId"]),
@@ -93,4 +93,150 @@ export default defineSchema({
     featured: v.array(v.string()),
     soundtrack: v.string(),
   }),
+
+  // --- Multiplayer -----------------------------------------------------------
+  // Anonymous visitors. `token` is a secret the browser generates and keeps in
+  // localStorage; it proves who's who and is never returned by any query.
+  visitors: defineTable({
+    token: v.string(),
+    name: v.string(),
+    color: v.string(),
+    allowDMs: v.boolean(),
+    online: v.boolean(),
+    roomId,
+    lastActiveAt: v.number(),
+    lastChatAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_online_active", ["online", "lastActiveAt"]),
+
+  // Where each visitor currently is. Kept apart from `visitors` so that
+  // walking only wakes up the room it happens in.
+  presence: defineTable({
+    visitorId: v.id("visitors"),
+    roomId,
+    name: v.string(),
+    color: v.string(),
+    x: v.number(),
+    z: v.number(),
+    yaw: v.number(),
+    moving: v.boolean(),
+    /** Accepts new private messages (mirrors visitors.allowDMs). */
+    open: v.optional(v.boolean()),
+    /** "bench:seat" while seated. */
+    seat: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_room_updated", ["roomId", "updatedAt"])
+    .index("by_room_seat", ["roomId", "seat"])
+    .index("by_visitor", ["visitorId"])
+    .index("by_updated", ["updatedAt"]),
+
+  // Batched room view: a ticker folds everyone's movement into one compact
+  // frame per room every 0.5–1 s. Clients subscribe to this, never to the
+  // presence rows, so a room's traffic no longer grows with every step taken.
+  roomFrames: defineTable({
+    roomId,
+    /** JSON array of [id, name, colour, x, z, yaw, moving, seat, t, open]. */
+    data: v.string(),
+    count: v.number(),
+    at: v.number(),
+  }).index("by_room", ["roomId"]),
+
+  /** Someone left a room (left, moved on, or timed out): the ticker removes them from its frame. */
+  departures: defineTable({
+    roomId,
+    visitorId: v.id("visitors"),
+    at: v.number(),
+  }).index("by_at", ["at"]),
+
+  /** The single ticker's bookkeeping; `gen` makes sure only one ticker loop runs. */
+  ticker: defineTable({
+    gen: v.number(),
+    lastTick: v.number(),
+    aliveAt: v.number(),
+  }),
+
+  // Capacity and the waiting line. When the gallery is full, new visitors
+  // take a ticket; the ticker admits the next ones as people leave.
+  queueTickets: defineTable({
+    token: v.string(),
+    /** Place in line (lower goes first). The owner's skip can make it fractional. */
+    seq: v.number(),
+    status: v.union(v.literal("waiting"), v.literal("admitted")),
+    lastSeen: v.number(),
+    admittedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_status_seq", ["status", "seq"])
+    .index("by_status_admitted", ["status", "admittedAt"]),
+
+  /** next: the next ticket number; serving: the last ticket admitted; waiting: how many are in line. */
+  queueState: defineTable({
+    next: v.number(),
+    serving: v.number(),
+    waiting: v.number(),
+  }),
+
+  // Live head counts, split into shards so simultaneous arrivals don't
+  // conflict on one document. A room's count is the sum of its shards.
+  roomCounts: defineTable({
+    roomId,
+    shard: v.number(),
+    count: v.number(),
+  }).index("by_room_shard", ["roomId", "shard"]),
+
+  // Room and gallery-wide chat. channel: "gallery" | "room:<roomId>".
+  messages: defineTable({
+    channel: v.string(),
+    visitorId: v.id("visitors"),
+    name: v.string(),
+    color: v.string(),
+    body: v.string(),
+  }).index("by_channel", ["channel"]),
+
+  // "Someone is typing…" for a chat channel or a private conversation ("dm:<id>").
+  typing: defineTable({
+    channel: v.string(),
+    visitorId: v.id("visitors"),
+    name: v.string(),
+    expiresAt: v.number(),
+  })
+    .index("by_channel", ["channel"])
+    .index("by_visitor", ["visitorId"])
+    .index("by_expires", ["expiresAt"]),
+
+  // Private one-to-one conversations. `a` < `b` (by id) so each pair has one.
+  conversations: defineTable({
+    key: v.string(),
+    a: v.id("visitors"),
+    b: v.id("visitors"),
+    lastAt: v.number(),
+    lastFrom: v.id("visitors"),
+    lastBody: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_a", ["a", "lastAt"])
+    .index("by_b", ["b", "lastAt"]),
+
+  directMessages: defineTable({
+    conversationId: v.id("conversations"),
+    from: v.id("visitors"),
+    body: v.string(),
+  }).index("by_conversation", ["conversationId"]),
+
+  /** How far each participant has read a conversation. */
+  conversationReads: defineTable({
+    conversationId: v.id("conversations"),
+    visitorId: v.id("visitors"),
+    lastReadAt: v.number(),
+  }).index("by_conversation_visitor", ["conversationId", "visitorId"]),
+
+  blocks: defineTable({
+    blocker: v.id("visitors"),
+    blocked: v.id("visitors"),
+  })
+    .index("by_pair", ["blocker", "blocked"])
+    .index("by_blocked", ["blocked"]),
 });

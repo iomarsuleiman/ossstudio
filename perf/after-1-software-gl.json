@@ -1,0 +1,211 @@
+{
+  "when": "2026-11-09T09:01:17.840Z",
+  "url": "http://localhost:3300",
+  "room": "art",
+  "device": "1280x800",
+  "softwareGL": true,
+  "loadMs": 2494,
+  "results": [
+    {
+      "scenario": "idle",
+      "wallMs": 3001,
+      "frames": 98,
+      "fps": 31.8,
+      "frameMs": {
+        "p50": 16.7,
+        "p95": 83.4,
+        "p99": 100,
+        "max": 100
+      },
+      "freezes": 0,
+      "longTasks": {
+        "count": 22,
+        "totalMs": 1941
+      },
+      "drawCalls": 97,
+      "triangles": 61532,
+      "geometries": 75,
+      "textures": 26,
+      "programs": 11,
+      "heapMB": 20.7,
+      "paintingMs": 12,
+      "paintedArtworks": 4
+    },
+    {
+      "scenario": "walk",
+      "wallMs": 3537,
+      "frames": 74,
+      "fps": 21.1,
+      "frameMs": {
+        "p50": 33.3,
+        "p95": 83.4,
+        "p99": 100,
+        "max": 100
+      },
+      "freezes": 0,
+      "longTasks": {
+        "count": 36,
+        "totalMs": 3085
+      },
+      "drawCalls": 83,
+      "triangles": 54194,
+      "geometries": 75,
+      "textures": 26,
+      "programs": 11,
+      "heapMB": 20.7,
+      "paintingMs": 0,
+      "paintedArtworks": 0
+    },
+    {
+      "scenario": "turn",
+      "wallMs": 4292,
+      "frames": 124,
+      "fps": 28.8,
+      "frameMs": {
+        "p50": 33.3,
+        "p95": 66.7,
+        "p99": 66.7,
+        "max": 83.3
+      },
+      "freezes": 0,
+      "longTasks": {
+        "count": 53,
+        "totalMs": 3218
+      },
+      "drawCalls": 55,
+      "triangles": 44156,
+      "geometries": 78,
+      "textures": 26,
+      "programs": 11,
+      "heapMB": 20.7,
+      "paintingMs": 0,
+      "paintedArtworks": 0
+    },
+    {
+      "scenario": "click-to-move",
+      "wallMs": 10472,
+      "frames": 257,
+      "fps": 24.5,
+      "frameMs": {
+        "p50": 33.3,
+        "p95": 66.7,
+        "p99": 83.4,
+        "max": 100
+      },
+      "freezes": 0,
+      "longTasks": {
+        "count": 128,
+        "totalMs": 9075
+      },
+      "drawCalls": 35,
+      "triangles": 35358,
+      "geometries": 79,
+      "textures": 26,
+      "programs": 12,
+      "heapMB": 20.7,
+      "paintingMs": 0,
+      "paintedArtworks": 0
+    },
+    {
+      "scenario": "sit",
+      "wallMs": 12842,
+      "frames": 299,
+      "fps": 23.3,
+      "frameMs": {
+        "p50": 33.3,
+        "p95": 83.4,
+        "p99": 100,
+        "max": 100.1
+      },
+      "freezes": 1,
+      "longTasks": {
+        "count": 149,
+        "totalMs": 11150
+      },
+      "drawCalls": 24,
+      "triangles": 29159,
+      "geometries": 97,
+      "textures": 30,
+      "programs": 12,
+      "heapMB": 20.7,
+      "paintingMs": 0,
+      "paintedArtworks": 0
+    },
+    {
+      "scenario": "open-artwork",
+      "wallMs": 4628,
+      "frames": 61,
+      "fps": 13.2,
+      "frameMs": {
+        "p50": 66.7,
+        "p95": 200,
+        "p99": 216.6,
+        "max": 216.6
+      },
+      "freezes": 17,
+      "longTasks": {
+        "count": 31,
+        "totalMs": 3965
+      },
+      "drawCalls": 20,
+      "triangles": 27555,
+      "geometries": 99,
+      "textures": 31,
+      "programs": 12,
+      "heapMB": 20.7,
+      "paintingMs": 0,
+      "paintedArtworks": 0
+    },
+    {
+      "scenario": "teleport",
+      "wallMs": 3062,
+      "frames": 35,
+      "fps": 11.4,
+      "frameMs": {
+        "p50": 83.3,
+        "p95": 216.7,
+        "p99": 383.3,
+        "max": 383.3
+      },
+      "freezes": 14,
+      "longTasks": {
+        "count": 20,
+        "totalMs": 2448
+      },
+      "drawCalls": 77,
+      "triangles": 52138,
+      "geometries": 62,
+      "textures": 12,
+      "programs": 11,
+      "heapMB": 20.7,
+      "paintingMs": 31,
+      "paintedArtworks": 9
+    },
+    {
+      "scenario": "idle-after",
+      "wallMs": 3000,
+      "frames": 58,
+      "fps": 19.8,
+      "frameMs": {
+        "p50": 16.7,
+        "p95": 150,
+        "p99": 183.3,
+        "max": 183.3
+      },
+      "freezes": 6,
+      "longTasks": {
+        "count": 24,
+        "totalMs": 2463
+      },
+      "drawCalls": 77,
+      "triangles": 52138,
+      "geometries": 62,
+      "textures": 20,
+      "programs": 10,
+      "heapMB": 20.7,
+      "paintingMs": 32,
+      "paintedArtworks": 8
+    }
+  ],
+  "errors": []
+}

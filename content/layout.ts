@@ -9,7 +9,14 @@ import type { RoomId } from "./rooms";
 import { MAIN_HALL_HIGHLIGHTS, PHYSICAL_INVENTIONS } from "./rooms";
 import { LINUX_DISTRIBUTIONS } from "./catalogue-2";
 
-interface ProjectLike { slug: string; roomId: RoomId; openingOrder?: number; title: string }
+interface ProjectLike { slug: string; roomId: RoomId; openingOrder?: number; title: string; motif?: string }
+
+/** Motifs that get a small animated sculpture in front of their painting. */
+export const INSTALLATION_MOTIFS = [
+  "chess", "sculpture", "voice", "send", "branches", "wave",
+  "reel", "containers", "constellation", "vault", "circuit", "chip",
+] as const;
+const hasSculpture = (p: ProjectLike) => !!p.motif && (INSTALLATION_MOTIFS as readonly string[]).includes(p.motif);
 interface RoomLike { id: RoomId; order: number }
 
 export interface ExhibitPlacement {
@@ -34,11 +41,35 @@ export interface DoorPlacement {
   arrive: { x: number; z: number; yaw: number };
 }
 
+export interface BenchPlacement {
+  x: number;
+  z: number;
+  /** Direction a seated visitor faces: forward = (sin rotY, cos rotY). The bench's long side runs across it. */
+  rotY?: number;
+}
+
+/** Seats per bench and their offsets along the bench. */
+export const BENCH_SEATS = [-0.62, 0, 0.62];
+export const BENCH_HALF_LENGTH = 1.05;
+export const BENCH_HALF_DEPTH = 0.25;
+
+/** World position of a seat, and of the spot in front of it where you stand up. */
+export function seatPose(b: BenchPlacement, seat: number) {
+  const rot = b.rotY ?? Math.PI;
+  const fx = Math.sin(rot), fz = Math.cos(rot); // facing
+  const ax = Math.cos(rot), az = -Math.sin(rot); // along the bench
+  const o = BENCH_SEATS[seat] ?? 0;
+  return {
+    x: b.x + ax * o, z: b.z + az * o, yaw: rot,
+    standX: b.x + ax * o + fx * 0.62, standZ: b.z + az * o + fz * 0.62,
+  };
+}
+
 export interface RoomShape {
   roomId: RoomId;
   width: number;
   length: number;
-  benches: { x: number; z: number }[];
+  benches: BenchPlacement[];
   /** Signed sub-sections within a hall (e.g. Linux Distributions), placed at z. */
   sections?: { id: "linux" | "inventions"; z: number }[];
 }
@@ -58,7 +89,8 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
   const galleries = ordered.filter((r) => r.id !== "main");
 
   // --- Main Hall -----------------------------------------------------------
-  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [{ x: 0, z: 0 }] });
+  // Two benches face the highlights wall, clear of the entrance map and the portals.
+  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [{ x: -3.6, z: -6.4, rotY: Math.PI }, { x: 3.6, z: -6.4, rotY: Math.PI }] });
   MAIN_HALL_HIGHLIGHTS.forEach((slug, i) => {
     const x = -5.4 + i * 3.6;
     const z = -MAIN_L / 2 + 0.12;
@@ -95,8 +127,7 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
     const pairs = Math.ceil(rest.length / 2) + (distros.length ? Math.ceil(distros.length / 2) + 1 : 0) + (alcove.length ? 2 : 0);
     const length = Math.max(18, pairs * FRAME_SPACING + 9);
     const half = length / 2;
-    const benches: { x: number; z: number }[] = [];
-    for (let z = half - 12; z > -half + 6; z -= 13) benches.push({ x: 0, z });
+    const benches: BenchPlacement[] = [];
     const sections: NonNullable<RoomShape["sections"]> = [];
     const shape: RoomShape = { roomId: room.id, width: ROOM_WIDTH, length, benches, sections };
     shapes.push(shape);
@@ -115,6 +146,7 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         return;
       }
       const x = left ? -ROOM_WIDTH / 2 + 0.1 : ROOM_WIDTH / 2 - 0.1;
+      if (kind === "frame") frames.push({ idx, exhibit: exhibits.length, clear: !hasSculpture(p) });
       exhibits.push({
         id: `${room.id}:${p.slug}`, slug: p.slug, roomId: room.id, kind,
         x, y: opening ? 2.0 : 1.9, z,
@@ -123,6 +155,7 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         spawn: { x: left ? x + SPAWN_DIST : x - SPAWN_DIST, z, yaw: left ? -Math.PI / 2 : Math.PI / 2 },
       });
     };
+    const frames: { idx: number; exhibit: number; clear: boolean }[] = [];
     const zOfIndex = (idx: number) => half - 5 - Math.floor(idx / 2) * FRAME_SPACING;
     rest.forEach((p, i) => place(p, i, "frame"));
     let base = Math.ceil(rest.length / 2) * 2;
@@ -137,8 +170,24 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
       base += 2;
       alcove.forEach((p, i) => place(p, base + i, "pedestal"));
     }
+    // Benches run parallel to the walls, 2.8 m in front of a painting and
+    // facing it. Every third pair gets one, alternating walls so the middle of
+    // the path stays clear, and never where a sculpture would block the view.
+    const byPair = new Map<number, typeof frames>();
+    for (const f of frames) byPair.set(Math.floor(f.idx / 2), [...(byPair.get(Math.floor(f.idx / 2)) ?? []), f]);
+    for (const [pair, list] of byPair) {
+      if (pair % 3 !== 1) continue;
+      const preferLeft = Math.floor(pair / 3) % 2 === 0;
+      const pick = [...list].sort((a, b) => Number((b.idx % 2 === 0) === preferLeft) - Number((a.idx % 2 === 0) === preferLeft)).find((f) => f.clear);
+      if (!pick) continue;
+      const e = exhibits[pick.exhibit];
+      const left = pick.idx % 2 === 0;
+      benches.push({ x: left ? e.x + 2.8 : e.x - 2.8, z: e.z, rotY: left ? -Math.PI / 2 : Math.PI / 2 });
+      // With a bench in front, the standing viewing spot moves between bench and painting.
+      e.spawn = { ...e.spawn, x: left ? e.x + 1.9 : e.x - 1.9 };
+    }
     // Keep benches clear of section signs.
-    shape.benches = benches.filter((b) => sections.every((s) => Math.abs(s.z - b.z) > 2));
+    shape.benches = benches.filter((b) => sections.every((s) => Math.abs(s.z - b.z) > 1.5));
 
     // Entrance (back to the Main Hall) and onward door to the next gallery.
     const next = galleries[gi + 1]?.id ?? "main";

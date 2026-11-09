@@ -15,7 +15,8 @@ export function archTube(width: number, height: number, radius = 0.12) {
   }
   for (let i = 0; i <= 12; i++) pts.push(new THREE.Vector3(r, legTop - (legTop * i) / 12, 0));
   const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
-  return new THREE.TubeGeometry(curve, 160, radius, 12, false);
+  // 96×8 segments look identical at walking distance to the old 160×12 (unlit, smooth normals).
+  return new THREE.TubeGeometry(curve, 96, radius, 8, false);
 }
 
 /** Arched-top outline from y=0 to `height`. */
@@ -45,19 +46,42 @@ export function roundedRect(w: number, h: number, r: number, cx = 0, cy = 0) {
   return s;
 }
 
-/** Arched panel that an artwork hangs on. */
+/**
+ * Arched panel that an artwork hangs on. Panels of the same size share one
+ * geometry (a room has only two or three sizes), kept for the page's life.
+ */
+const steleCache = new Map<string, THREE.ExtrudeGeometry>();
 export function steleGeometry(width: number, height: number, depth = 0.16) {
-  return new THREE.ExtrudeGeometry(archShape(width, height), {
-    depth, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05, bevelSegments: 4, curveSegments: 48,
-  });
+  const key = `${width.toFixed(3)}:${height.toFixed(3)}:${depth}`;
+  let g = steleCache.get(key);
+  if (!g) {
+    g = new THREE.ExtrudeGeometry(archShape(width, height), {
+      depth, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.05, bevelSegments: 2, curveSegments: 28,
+    });
+    g.dispose = () => {};
+    steleCache.set(key, g);
+  }
+  return g;
 }
 
-/** Rounded picture frame with a hole for the canvas. */
+/** Rounded picture frame with a hole for the canvas (shared per size, like panels). */
+const frameCache = new Map<string, THREE.ExtrudeGeometry>();
 export function frameGeometry(w: number, h: number, border = 0.1) {
+  const key = `${w.toFixed(3)}:${h.toFixed(3)}:${border}`;
+  let g = frameCache.get(key);
+  if (!g) {
+    g = buildFrame(w, h, border);
+    g.dispose = () => {};
+    frameCache.set(key, g);
+  }
+  return g;
+}
+
+function buildFrame(w: number, h: number, border: number) {
   const outer = roundedRect(w + border * 2, h + border * 2, 0.06);
   outer.holes.push(roundedRect(w, h, 0.02) as unknown as THREE.Path);
   return new THREE.ExtrudeGeometry(outer, {
-    depth: 0.05, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.03, bevelSegments: 3, curveSegments: 12,
+    depth: 0.05, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.03, bevelSegments: 2, curveSegments: 6,
   });
 }
 

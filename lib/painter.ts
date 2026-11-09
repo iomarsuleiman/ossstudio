@@ -57,7 +57,10 @@ function mix(a: string, b: string, t: number) {
   return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function makeCanvas(w: number, h: number) {
+function makeCanvas(w: number, h: number): HTMLCanvasElement {
+  // In a worker (artworks are painted off the main thread) there is no DOM:
+  // OffscreenCanvas has the same 2D drawing API.
+  if (typeof document === "undefined") return new OffscreenCanvas(w, h) as unknown as HTMLCanvasElement;
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;

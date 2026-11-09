@@ -4,15 +4,14 @@ import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { ExhibitPlacement, Motif } from "@/content";
+import { INSTALLATION_MOTIFS } from "@/content/layout";
+import { useRoomActive } from "./roomActive";
 
 // Small sculptural companions for selected Opening Collection pieces.
 // Each sits on the floor in front of its painting (or on the plinth for
 // pedestal pieces) and moves slowly. Motion is skipped with reduced motion.
 
-const ANIMATED: Partial<Record<Motif, true>> = {
-  chess: true, sculpture: true, voice: true, send: true, branches: true, wave: true,
-  reel: true, containers: true, constellation: true, vault: true, circuit: true, chip: true,
-};
+const ANIMATED: Partial<Record<Motif, true>> = Object.fromEntries(INSTALLATION_MOTIFS.map((m) => [m, true]));
 
 export const INSTALLATION_OFFSET = 1.05;
 
@@ -51,7 +50,9 @@ function Piece({ motif, accent, trim }: { motif: Motif; accent: string; trim: st
   const reduced = useMemo(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const glowMat = useMemo(() => new THREE.MeshBasicMaterial({ color: accent, toneMapped: false }), [accent]);
 
+  const active = useRoomActive();
   useFrame(({ clock }) => {
+    if (!active) return; // a hidden, recently visited room
     if (reduced) return;
     const t = clock.elapsedTime;
     const g = ref.current;

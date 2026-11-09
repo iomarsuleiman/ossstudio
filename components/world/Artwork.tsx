@@ -9,6 +9,7 @@ import { paintPlaque } from "@/lib/painter";
 import type { WorldStore } from "@/lib/worldStore";
 import { mix, paintMaterial, type Atmosphere } from "./paint";
 import { frameGeometry, steleGeometry } from "./shapes";
+import { useRoomActive } from "./roomActive";
 
 const loader = new THREE.TextureLoader();
 
@@ -49,6 +50,10 @@ export function Artwork({
   useEffect(() => {
     let alive = true;
     let loaded: THREE.Texture | null = null;
+    // Counted so a teleport can lift its veil as soon as the room is fully painted.
+    let pending = true;
+    store.texturesPending++;
+    const done = () => { if (pending) { pending = false; store.texturesPending--; } };
     artworkUrl(project, home).then((url) => {
       if (!alive) return;
       loader.load(url, (t) => {
@@ -57,13 +62,15 @@ export function Artwork({
         t.anisotropy = 4;
         loaded = t;
         setTex(t);
-      });
-    });
+        done();
+      }, undefined, done);
+    }, done);
     return () => {
       alive = false;
+      done();
       loaded?.dispose();
     };
-  }, [project, home]);
+  }, [project, home, store]);
 
   const plaque = useMemo(() => {
     const t = new THREE.CanvasTexture(paintPlaque(project.title, room.palette));
@@ -72,10 +79,16 @@ export function Artwork({
   }, [project.title, room.palette]);
   useEffect(() => () => plaque.dispose(), [plaque]);
 
+  const active = useRoomActive();
   useFrame((_, dt) => {
+    if (!active) return; // a hidden, recently visited room
     const near = store.nearby?.id === exhibit.id ? 1 : 0;
     glow.current += (near - glow.current) * (1 - Math.exp(-dt / 0.25));
-    if (halo.current) halo.current.opacity = glow.current * 0.7;
+    if (halo.current) {
+      halo.current.opacity = glow.current * 0.7;
+      // A fully faded halo is skipped: no draw call, no transparent overdraw.
+      halo.current.visible = glow.current > 0.01;
+    }
     if (group.current) {
       const s = 1 + glow.current * 0.025;
       group.current.scale.setScalar(s);
@@ -103,7 +116,8 @@ export function Artwork({
     <group position={[exhibit.x, exhibit.y, exhibit.z]} rotation={[0, exhibit.rotY, 0]}>
       <group
         ref={group}
-        onClick={(e) => { if (e.delta > 6) return; e.stopPropagation(); onClick(); }}
+        userData={{ onActivate: onClick }}
+        onClick={(e) => { if (e.delta > 6 || store.pointerLocked) return; e.stopPropagation(); onClick(); }}
         onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { document.body.style.cursor = ""; }}
       >

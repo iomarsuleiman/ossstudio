@@ -26,8 +26,22 @@ export interface WorldStore {
   /** Which way the figure faces in third person (follows its walking direction). */
   bodyYaw: number;
   keys: Set<string>;
-  /** Tap/click-to-move destination. */
+  /** Tap/click-to-move destination (the next waypoint while following a path). */
   target: { x: number; z: number } | null;
+  /** Remaining waypoints after `target` for click-to-move. */
+  path: { x: number; z: number }[];
+  /** Final click-to-move destination, shown as a soft ring on the floor. */
+  destination: { x: number; z: number } | null;
+  /** Seat to take once the path ends (bench index in this room, seat index). */
+  targetSeat: { bench: number; seat: number } | null;
+  /** The seat you're on, if any. */
+  seat: { bench: number; seat: number } | null;
+  /** 0 = standing, 1 = seated (eased). */
+  sitBlend: number;
+  /** Where you stood before sitting down; you stand back up there. */
+  standFrom: { x: number; z: number } | null;
+  /** Mouse look (pointer lock) is engaged on desktop. */
+  pointerLocked: boolean;
   /** Exhibit to face once the target is reached. */
   targetExhibit: string | null;
   nearby: ExhibitPlacement | null;
@@ -46,6 +60,25 @@ export interface WorldStore {
   onStep?: () => void;
   onArrive?: (e: ExhibitPlacement) => void;
   onNearMap?: (near: boolean) => void;
+  /** Within a few steps of a door to another room. */
+  onNearDoor?: (to: RoomId) => void;
+  /** Asked to sit: resolve to true when the seat is yours (multiplayer may refuse a taken seat). */
+  onSitRequest?: (bench: number, seat: number) => Promise<boolean>;
+  onSeatChange?: (seat: { bench: number; seat: number } | null) => void;
+  /** Walk to a point along a path around obstacles (set by the movement controller). */
+  navigate?: (to: { x: number; z: number }) => boolean;
+  /** Walk to a bench and sit on its nearest free seat. */
+  sitOn?: (bench: number) => void;
+  /** Rooms currently mounted (current first); see World.tsx. */
+  loadedRooms: RoomId[];
+  /** Visual quality tier (see lib/quality.ts). */
+  quality: "high" | "medium" | "low";
+  /** Other visitors are moving nearby, so keep drawing smoothly. */
+  remoteActive: boolean;
+  /** Artwork textures still loading in the current room. */
+  texturesPending: number;
+  /** Seats other visitors occupy in this room ("bench:seat"). */
+  takenSeats: Set<string>;
 }
 
 export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, yaw: number): WorldStore {
@@ -64,6 +97,18 @@ export function createWorldStore(roomId: RoomId, pos: { x: number; z: number }, 
     bodyYaw: yaw,
     keys: new Set(),
     target: null,
+    path: [],
+    destination: null,
+    targetSeat: null,
+    seat: null,
+    sitBlend: 0,
+    standFrom: null,
+    pointerLocked: false,
+    takenSeats: new Set(),
+    texturesPending: 0,
+    remoteActive: false,
+    quality: "high",
+    loadedRooms: [],
     targetExhibit: null,
     nearby: null,
     linger: 0,
