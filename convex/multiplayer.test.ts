@@ -21,6 +21,20 @@ async function setup(n = 2, roomId = "art") {
 }
 
 describe("presence", () => {
+  it("keeps ticking when a new visitor is still inside the snapshot lag", async () => {
+    const { t } = await setup(1);
+    await t.mutation(internal.presence.ensureTicker, {});
+    const ticker = await t.query(internal.presence.tickerState, {});
+    if (!ticker) throw new Error("Ticker did not start");
+    const first = await t.action(internal.presence.tick, { gen: ticker.gen });
+    expect(first.changed).toBe(0);
+    const scheduled = await t.run(async (ctx) => await ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.filter((job) => job.name === "presence:tick")).toHaveLength(2);
+    vi.setSystemTime(Date.now() + 1000);
+    await t.action(internal.presence.tick, { gen: ticker.gen, once: true });
+    expect(JSON.parse((await t.query(api.presence.frame, { roomId: "art" })).data)).toHaveLength(1);
+  });
+
   it("joins, counts and lists visitors per room", async () => {
     const { t, people } = await setup(3);
     expect(new Set(people.map((p) => p.visitorId)).size).toBe(3);

@@ -276,6 +276,8 @@ export const changes = internalQuery({
     const left = await ctx.db.query("departures").withIndex("by_at", (q) => q.gte("at", since).lt("at", until)).take(8000);
     const line = await ctx.db.query("queueState").first();
     return {
+      // Recent joins can be newer than `until` and absent from the first frame.
+      active: !!(await ctx.db.query("presence").withIndex("by_updated", (q) => q.gte("updatedAt", Date.now() - PRESENCE_TTL_MS)).first()),
       waiting: line?.waiting ?? 0,
       rows: moved.map((p) => ({ roomId: p.roomId, row: [p.visitorId, p.name, p.color, p.x, p.z, p.yaw, p.moving ? 1 : 0, p.seat ?? null, p.updatedAt, p.open === false ? 0 : 1] as FrameRow })),
       left: left.map((d) => ({ roomId: d.roomId, id: d.visitorId as string })),
@@ -285,7 +287,7 @@ export const changes = internalQuery({
 });
 
 const frameRow = v.array(v.any());
-type Changes = { waiting: number; rows: { roomId: string; row: FrameRow }[]; left: { roomId: string; id: string }[]; truncated: boolean };
+type Changes = { active: boolean; waiting: number; rows: { roomId: string; row: FrameRow }[]; left: { roomId: string; id: string }[]; truncated: boolean };
 
 /** Fold changes into the room frames. Only this ticker writes frames, so it never conflicts. */
 export const writeFrames = internalMutation({
@@ -348,7 +350,7 @@ export const tick = internalAction({
     // People are waiting to come in: let the next ones in as room frees up.
     if (ch.waiting > 0) await ctx.runMutation(internal.queue.admit, {});
     // Keep ticking while anyone is around; join() restarts the loop otherwise.
-    if (!once && (r.online > 0 || ch.rows.length || ch.left.length)) await ctx.scheduler.runAfter(r.interval, internal.presence.tick, { gen });
+    if (!once && (ch.active || ch.waiting > 0 || r.online > 0 || ch.rows.length || ch.left.length)) await ctx.scheduler.runAfter(r.interval, internal.presence.tick, { gen });
     return { stopped: false, online: r.online, changed: ch.rows.length, left: ch.left.length };
   },
 });
