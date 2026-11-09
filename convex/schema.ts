@@ -121,6 +121,8 @@ export default defineSchema({
     z: v.number(),
     yaw: v.number(),
     moving: v.boolean(),
+    /** Accepts new private messages (mirrors visitors.allowDMs). */
+    open: v.optional(v.boolean()),
     /** "bench:seat" while seated. */
     seat: v.optional(v.string()),
     updatedAt: v.number(),

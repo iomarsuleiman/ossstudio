@@ -380,7 +380,8 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
 
     // Third-person pose: behind and a little above the figure, looking where
     // you look. Dragging up/down tilts the camera around the figure.
-    const back = aspect < 1 ? 4.6 : 4.0;
+    // Seated facing a wall there's less room behind you: come in closer.
+    const back = (aspect < 1 ? 4.6 : 4.0) - ease(s.sitBlend) * 1.9;
     const camY = Math.max(0.9, Math.min(4.2, 2.25 - s.pitch * 2.4 - s.sitBlend * 0.3));
     const chase = v.chase.set(s.pos.x - Math.sin(s.yaw) * back, camY, s.pos.z - Math.cos(s.yaw) * back);
     // Keep the camera over the walkway, clear of the artwork panels at its edges.

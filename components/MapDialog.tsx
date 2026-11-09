@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { NetStore } from "@/lib/multiplayer/net";
+import { MP } from "@/lib/multiplayer/strings";
 import type { GalleryContent, Locale, Project, RoomId } from "@/content";
 import { UI } from "@/lib/i18n";
 import { searchProjects } from "@/lib/search";
 import { ATMOSPHERE } from "./world/atmosphere";
 
 export function MapDialog({
-  content, locale, currentRoom, onClose, onRoom, onProject,
+  content, locale, currentRoom, net, onClose, onRoom, onProject,
 }: {
+  /** Live head counts per room, when multiplayer is on. */
+  net?: NetStore;
   content: GalleryContent;
   locale: Locale;
   currentRoom: RoomId;
@@ -17,6 +21,8 @@ export function MapDialog({
   onProject: (slug: string) => void;
 }) {
   const ui = UI[locale];
+  const noNet = useMemo(() => ({ subscribe: () => () => {}, get: () => null }), []);
+  const counts = useSyncExternalStore(net?.subscribe ?? noNet.subscribe, () => net?.counts ?? null, () => null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<RoomId>(currentRoom === "main" ? "main" : currentRoom);
   const input = useRef<HTMLInputElement>(null);
@@ -108,6 +114,7 @@ export function MapDialog({
                   <span className="map-node-orb" aria-hidden="true" />
                   <span className="map-node-label">{r.t[locale].title}</span>
                   {here && <span className="map-node-here">{ui.youAreHere}</span>}
+                  {!!counts?.rooms[r.id] && <span className="map-node-count">{MP[locale].here(counts.rooms[r.id])}</span>}
                 </button>
               );
             })}
@@ -119,6 +126,7 @@ export function MapDialog({
                 <div>
                   <h3>{selectedRoom.t[locale].title}</h3>
                   <p className="muted">{selectedRoom.t[locale].subtitle}</p>
+                  {!!counts?.rooms[selected] && <p className="small map-room-count">● {MP[locale].here(counts.rooms[selected])}</p>}
                 </div>
                 {selected === currentRoom ? (
                   <p className="map-here-badge" role="status">◉ {ui.youAreHere}</p>

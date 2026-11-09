@@ -9,11 +9,15 @@ import { FirstPerson } from "./FirstPerson";
 import { Figure } from "./Figure";
 import { FrameDriver } from "./FrameDriver";
 import { MouseLook } from "./MouseLook";
+import { RemoteVisitors } from "./RemoteVisitors";
+import type { NetStore } from "@/lib/multiplayer/net";
 import { ATMOSPHERE } from "./atmosphere";
 
 export default function World({
-  content, locale, roomId, store, onReady, onExhibitClick, onFloorClick, onMapRoom,
+  content, locale, roomId, store, net, onReady, onExhibitClick, onFloorClick, onMapRoom, onChatWith,
 }: {
+  net: NetStore;
+  onChatWith: (visitorId: string) => void;
   content: GalleryContent;
   locale: Locale;
   roomId: RoomId;
@@ -31,7 +35,9 @@ export default function World({
       frameloop="demand"
       camera={{ fov: 62, near: 0.05, far: 400, position: [0, 1.62, 8] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      onCreated={({ gl }) => {
+      onCreated={({ gl, camera }) => {
+        // `?debug` also exposes the camera, for automated walk-through tests.
+        if (new URLSearchParams(window.location.search).has("debug")) (window as unknown as { __camera: unknown }).__camera = camera;
         // Flat, true-to-paint colour: no filmic tone mapping.
         gl.toneMapping = THREE.NoToneMapping;
         requestAnimationFrame(() => onReady());
@@ -52,6 +58,7 @@ export default function World({
         />
         <FirstPerson content={content} room={room} store={store} />
         <Figure store={store} atmosphere={ATMOSPHERE[room.id]} />
+        <RemoteVisitors net={net} store={store} atmosphere={ATMOSPHERE[room.id]} onChat={onChatWith} />
       </group>
     </Canvas>
   );

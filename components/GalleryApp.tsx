@@ -21,6 +21,8 @@ import { CollectButton } from "./CollectButton";
 import { CollectionShelf } from "./CollectionShelf";
 import { GiftShop } from "./GiftShop";
 import { collection, useCollection } from "@/lib/collection";
+import { NetStore } from "@/lib/multiplayer/net";
+import { MultiplayerLayer, type ChatRequest } from "./multiplayer/MultiplayerLayer";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
 
@@ -96,6 +98,16 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     storeRef.current = s;
   }
   const store = storeRef.current;
+  const netRef = useRef<NetStore | null>(null);
+  if (!netRef.current) netRef.current = new NetStore();
+  const net = netRef.current;
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
+  const onChatWith = useCallback((visitorId: string) => {
+    if (document.pointerLockElement) document.exitPointerLock();
+    setChatRequest({ tab: "messages", with: visitorId, nonce: Date.now() });
+    setChatOpen(true);
+  }, []);
 
   const [entered, setEntered] = useState(start.entered);
   const [roomId, setRoomId] = useState<RoomId>(start.roomId);
@@ -424,6 +436,12 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
       if (e.code === "Escape" && selected) { e.preventDefault(); setSelected(null); return; }
       if (e.code === "KeyL") { e.preventDefault(); toggleMouseLook(); return; }
+      if (e.code === "KeyT" && net.status !== "off") {
+        e.preventDefault();
+        if (document.pointerLockElement) document.exitPointerLock();
+        setChatOpen(true);
+        return;
+      }
       if (e.code === "KeyM") { e.preventDefault(); setMapOpen(true); return; }
       if (e.code === "KeyV") { e.preventDefault(); toggleView(); return; }
       const focus = selected ?? store.nearby;
@@ -441,7 +459,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
-  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook]);
+  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook, net]);
 
   useEffect(() => {
     const paused = mapOpen || shelfOpen || !!checkout;
@@ -580,6 +598,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             locale={locale}
             roomId={roomId}
             store={store}
+            net={net}
+            onChatWith={onChatWith}
             onReady={() => setReady(true)}
             onExhibitClick={onExhibitClick}
             onFloorClick={onFloorClick}
@@ -734,6 +754,20 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         </div>
       )}
 
+      <MultiplayerLayer
+        net={net}
+        store={store}
+        content={content}
+        locale={locale}
+        roomId={roomId}
+        entered={entered}
+        hud={showHud && !mapOpen && !shelfOpen && !checkout}
+        chatOpen={chatOpen && showHud}
+        setChatOpen={setChatOpen}
+        request={chatRequest}
+        onNotify={() => audio.chime()}
+      />
+
       {shelfOpen && (
         <CollectionShelf
           content={content}
@@ -753,6 +787,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
           content={content}
           locale={locale}
           currentRoom={roomId}
+          net={net}
           onClose={() => setMapOpen(false)}
           onRoom={teleportToRoom}
           onProject={teleportToProject}

@@ -10,7 +10,8 @@ import type { WorldStore } from "@/lib/worldStore";
 // centre of the screen and activate the first interactive object it hits
 // (anything with `userData.onActivate`: artworks, benches, the floor, people).
 
-type Activate = (point: THREE.Vector3) => void;
+/** Return false to let the click pass through to whatever is behind. */
+type Activate = (point: THREE.Vector3) => boolean | void;
 
 export function MouseLook({ store }: { store: WorldStore }) {
   const { gl, scene, camera } = useThree();
@@ -25,7 +26,7 @@ export function MouseLook({ store }: { store: WorldStore }) {
       for (const hit of ray.intersectObjects(scene.children, true)) {
         let o: THREE.Object3D | null = hit.object;
         while (o && !o.userData.onActivate) o = o.parent;
-        if (o) { (o.userData.onActivate as Activate)(hit.point); return; }
+        if (o && (o.userData.onActivate as Activate)(hit.point) !== false) return;
       }
     };
     el.addEventListener("mousedown", click);

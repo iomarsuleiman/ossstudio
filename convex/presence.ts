@@ -54,9 +54,9 @@ export const join = mutation({
         await addToCount(ctx, existing.roomId, -1);
         await addToCount(ctx, roomId, 1);
       }
-      await ctx.db.patch(existing._id, { roomId, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, seat: undefined, updatedAt: now, name: visitor.name, color: visitor.color });
+      await ctx.db.patch(existing._id, { roomId, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, seat: undefined, updatedAt: now, name: visitor.name, color: visitor.color, open: visitor.allowDMs });
     } else {
-      await ctx.db.insert("presence", { visitorId: visitor._id, roomId, name: visitor.name, color: visitor.color, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, updatedAt: now });
+      await ctx.db.insert("presence", { visitorId: visitor._id, roomId, name: visitor.name, color: visitor.color, open: visitor.allowDMs, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, updatedAt: now });
       await addToCount(ctx, roomId, 1);
     }
     return {
@@ -100,7 +100,7 @@ export const changeRoom = mutation({
       }
       await ctx.db.patch(p._id, { roomId, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, seat: undefined, updatedAt: now });
     } else {
-      await ctx.db.insert("presence", { visitorId: visitor._id, roomId, name: visitor.name, color: visitor.color, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, updatedAt: now });
+      await ctx.db.insert("presence", { visitorId: visitor._id, roomId, name: visitor.name, color: visitor.color, open: visitor.allowDMs, x: r2(x), z: r2(z), yaw: r2(yaw), moving: false, updatedAt: now });
       await addToCount(ctx, roomId, 1);
     }
     return { interval: sendIntervalFor(await roomCount(ctx, roomId)) };
@@ -159,7 +159,7 @@ export const setProfile = mutation({
     }
     if (allowDMs !== undefined) patch.allowDMs = allowDMs;
     await ctx.db.patch(visitor._id, patch);
-    if (p && patch.name) await ctx.db.patch(p._id, { name: patch.name });
+    if (p && (patch.name || patch.allowDMs !== undefined)) await ctx.db.patch(p._id, { name: patch.name ?? p.name, open: patch.allowDMs ?? p.open });
     return { name: patch.name ?? visitor.name, allowDMs: patch.allowDMs ?? visitor.allowDMs };
   },
 });
@@ -175,7 +175,7 @@ export const inRoom = query({
     // Most recently active first when the room is over the cap.
     rows.sort((a, b) => b.updatedAt - a.updatedAt);
     return rows.slice(0, 120).map((p) => ({
-      id: p.visitorId, n: p.name, c: p.color, x: p.x, z: p.z, y: p.yaw, m: p.moving, s: p.seat ?? null, t: p.updatedAt,
+      id: p.visitorId, n: p.name, c: p.color, x: p.x, z: p.z, y: p.yaw, m: p.moving, s: p.seat ?? null, t: p.updatedAt, o: p.open !== false,
     }));
   },
 });
