@@ -22,7 +22,8 @@ import { CollectionShelf } from "./CollectionShelf";
 import { GiftShop } from "./GiftShop";
 import { collection, useCollection } from "@/lib/collection";
 import { NetStore } from "@/lib/multiplayer/net";
-import { MultiplayerLayer, type ChatRequest } from "./multiplayer/MultiplayerLayer";
+import { ownerKey } from "@/lib/multiplayer/local";
+import { MultiplayerLayer, multiplayerEnabled, type ChatRequest } from "./multiplayer/MultiplayerLayer";
 import { PerfOverlay } from "./multiplayer/PerfOverlay";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
@@ -183,6 +184,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     if (visit.entered) { setEntered(true); store.mode = "walk"; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pick up an owner key from the address (#owner=…) and clean it out of the bar straight away.
+  useEffect(() => { if (multiplayerEnabled()) ownerKey(); }, []);
 
   // `?debug` exposes the world state for automated walk-through tests and shows performance numbers.
   const [debug, setDebug] = useState(false);
@@ -492,14 +496,24 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   }, [entered, openSlug, mapOpen, shelfOpen, checkout, focusWorld]);
 
   // --- entering the gallery -----------------------------------------------------------
-  const enterGallery = async (withSound: boolean) => {
+  // With live features on, entering goes through the waiting line (it lets
+  // you straight in when there's room). Sound starts on the click itself,
+  // since browsers only allow audio from a direct gesture.
+  const [entryRequested, setEntryRequested] = useState(false);
+  const finishEntering = useCallback(() => {
+    setEntryRequested(false);
     setEntered(true);
     store.mode = "walk";
     focusWorld();
-    if (withSound) { await audio.enable(); setSound(true); }
     setHint(true);
     later(() => setHint(false), 12000);
     persist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, focusWorld, persist]);
+  const enterGallery = async (withSound: boolean) => {
+    if (withSound) { await audio.enable(); setSound(true); }
+    if (multiplayerEnabled()) setEntryRequested(true);
+    else finishEntering();
   };
 
   const toggleSound = async () => {
@@ -739,7 +753,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         </p>
       )}
 
-      {!entered && (
+      {!entered && !entryRequested && (
         <div className="arrival" role="dialog" aria-modal="true" aria-labelledby="arrival-title">
           <div className="arrival-card">
             <button type="button" className="btn btn-quiet arrival-lang" onClick={switchLanguage} aria-label={ui.languageLabel} lang={locale === "en" ? "ar" : "en"}>
@@ -772,6 +786,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         setChatOpen={setChatOpen}
         request={chatRequest}
         onNotify={() => audio.chime()}
+        entryRequested={entryRequested}
+        onAdmitted={finishEntering}
+        onEntryCancelled={() => { setEntryRequested(false); if (!audio.muted) { audio.disable(); setSound(false); } }}
       />
 
       {shelfOpen && (

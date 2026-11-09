@@ -13,8 +13,8 @@ import { ROOM_IDS } from "./visitorAuth";
 
 const modules = import.meta.glob("./**/*.ts");
 
-beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => { vi.useRealTimers(); });
+beforeEach(() => { vi.useFakeTimers(); vi.stubEnv("GALLERY_CAPACITY", "10000"); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 const VISITORS = 5000;
 
 async function crowd(roomOf: (i: number) => string) {

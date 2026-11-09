@@ -158,6 +158,27 @@ export default defineSchema({
     aliveAt: v.number(),
   }),
 
+  // Capacity and the waiting line. When the gallery is full, new visitors
+  // take a ticket; the ticker admits the next ones as people leave.
+  queueTickets: defineTable({
+    token: v.string(),
+    /** Place in line (lower goes first). The owner's skip can make it fractional. */
+    seq: v.number(),
+    status: v.union(v.literal("waiting"), v.literal("admitted")),
+    lastSeen: v.number(),
+    admittedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_status_seq", ["status", "seq"])
+    .index("by_status_admitted", ["status", "admittedAt"]),
+
+  /** next: the next ticket number; serving: the last ticket admitted; waiting: how many are in line. */
+  queueState: defineTable({
+    next: v.number(),
+    serving: v.number(),
+    waiting: v.number(),
+  }),
+
   // Live head counts, split into shards so simultaneous arrivals don't
   // conflict on one document. A room's count is the sum of its shards.
   roomCounts: defineTable({

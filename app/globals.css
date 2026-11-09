@@ -682,3 +682,12 @@ button { font: inherit; color: inherit; }
   position: absolute; z-index: 60; top: 50%; left: 8px; margin: 0; padding: 6px 8px; border-radius: 8px;
   background: rgba(20, 16, 16, 0.72); color: #e9f5e0; font: 11px/1.45 ui-monospace, monospace; pointer-events: none;
 }
+/* --- Waiting line ------------------------------------------------------------------ */
+.queue .arrival-card:focus { outline: none; }
+.queue-title { font-size: clamp(1.8rem, 5vw, 2.6rem); }
+.queue-position { margin: 0 0 var(--s1); font-family: var(--font-head); font-size: clamp(1.6rem, 4.5vw, 2.2rem); font-weight: 600; color: var(--burgundy); }
+.queue-dots { display: flex; justify-content: center; gap: 8px; margin: var(--s3) 0 var(--s4); }
+.queue-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--rose); animation: queue-dot 1.4s ease-in-out infinite; }
+.queue-dots span:nth-child(2) { animation-delay: 0.2s; }
+.queue-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes queue-dot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-4px); } }

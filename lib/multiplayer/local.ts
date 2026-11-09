@@ -57,3 +57,22 @@ const EMPTY: Muted = {};
 export function useMutes(): Muted {
   return useSyncExternalStore(mutes.subscribe, () => load(), () => EMPTY);
 }
+
+// --- Owner key (for skipping the waiting line) ----------------------------------
+// Opened once as /en#owner=<key>: the fragment never reaches a server or its
+// logs. The key is kept in this browser only and the address bar is cleaned.
+// The server checks it against QUEUE_OWNER_KEY; without a match nothing happens.
+const OWNER_KEY = "osg:owner";
+
+export function ownerKey(): string | null {
+  try {
+    const m = window.location.hash.match(/owner=([^&]+)/);
+    if (m) {
+      localStorage.setItem(OWNER_KEY, decodeURIComponent(m[1]));
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+    return localStorage.getItem(OWNER_KEY);
+  } catch {
+    return null;
+  }
+}

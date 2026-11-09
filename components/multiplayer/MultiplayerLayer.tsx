@@ -11,11 +11,17 @@ import { MP } from "@/lib/multiplayer/strings";
 import type { WorldStore } from "@/lib/worldStore";
 import { DevClient } from "@/lib/multiplayer/devClient";
 import { ChatPanel, type ChatTab } from "./ChatPanel";
+import { QueueGate } from "./QueueGate";
 
 // Everything live: presence, avatars' data, chats and private messages. It is
 // optional and isolated: without NEXT_PUBLIC_CONVEX_URL it renders nothing,
 // and if Convex fails or is overloaded the error boundary and back-off below
 // switch live features off while the gallery itself keeps working.
+
+/** True when live features (and so the capacity limit and waiting line) are configured. */
+export function multiplayerEnabled() {
+  return !!(process.env.NEXT_PUBLIC_CONVEX_URL || process.env.NEXT_PUBLIC_MP_DEV);
+}
 
 let client: ConvexReactClient | null | undefined;
 function getClient() {
@@ -46,6 +52,10 @@ export interface MultiplayerProps {
   setChatOpen: (open: boolean) => void;
   request: ChatRequest | null;
   onNotify?: () => void;
+  /** Set when the visitor pressed Enter: show the waiting line if the gallery is full. */
+  entryRequested: boolean;
+  onAdmitted: () => void;
+  onEntryCancelled: () => void;
 }
 
 export function MultiplayerLayer(props: MultiplayerProps) {
@@ -55,6 +65,7 @@ export function MultiplayerLayer(props: MultiplayerProps) {
   if (!c) return null;
   return (
     <ConvexProvider client={c}>
+      {props.entryRequested && !props.entered && <QueueGate locale={props.locale} onAdmitted={props.onAdmitted} onCancel={props.onEntryCancelled} />}
       <LiveBoundary key={attempt} net={props.net} locale={props.locale} onRetry={() => setAttempt((n) => n + 1)}>
         <Live {...props} />
       </LiveBoundary>

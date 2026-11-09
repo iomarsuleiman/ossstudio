@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as dms from "../dms.js";
 import type * as gallery from "../gallery.js";
 import type * as presence from "../presence.js";
+import type * as queue from "../queue.js";
 import type * as seed from "../seed.js";
 import type * as visitorAuth from "../visitorAuth.js";
 
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   dms: typeof dms;
   gallery: typeof gallery;
   presence: typeof presence;
+  queue: typeof queue;
   seed: typeof seed;
   visitorAuth: typeof visitorAuth;
 }>;

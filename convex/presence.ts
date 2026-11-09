@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { mayEnter, useTicket } from "./queue";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   COUNT_SHARDS, PRESENCE_TTL_MS, TICK_LAG_MS, addToCount, cleanName, frameCapFor, isRoom, requireVisitor, sendIntervalFor, tickIntervalFor, visitorByToken,
@@ -45,6 +46,10 @@ export const join = mutation({
     if (!isRoom(roomId)) throw new Error("Unknown room");
     const now = Date.now();
     let visitor = await visitorByToken(ctx, token);
+    // Capacity: come in if you're already inside, hold an admitted ticket, or there's room and no line.
+    const already = visitor ? await ctx.db.query("presence").withIndex("by_visitor", (q) => q.eq("visitorId", visitor!._id)).unique() : null;
+    if (!(await mayEnter(ctx, token, !!already))) throw new Error("Gallery full");
+    await useTicket(ctx, token);
     if (!visitor) {
       const id = await ctx.db.insert("visitors", {
         token,
@@ -269,7 +274,9 @@ export const changes = internalQuery({
   handler: async (ctx, { since, until }) => {
     const moved = await ctx.db.query("presence").withIndex("by_updated", (q) => q.gte("updatedAt", since).lt("updatedAt", until)).take(8000);
     const left = await ctx.db.query("departures").withIndex("by_at", (q) => q.gte("at", since).lt("at", until)).take(8000);
+    const line = await ctx.db.query("queueState").first();
     return {
+      waiting: line?.waiting ?? 0,
       rows: moved.map((p) => ({ roomId: p.roomId, row: [p.visitorId, p.name, p.color, p.x, p.z, p.yaw, p.moving ? 1 : 0, p.seat ?? null, p.updatedAt, p.open === false ? 0 : 1] as FrameRow })),
       left: left.map((d) => ({ roomId: d.roomId, id: d.visitorId as string })),
       truncated: moved.length === 8000 || left.length === 8000,
@@ -278,7 +285,7 @@ export const changes = internalQuery({
 });
 
 const frameRow = v.array(v.any());
-type Changes = { rows: { roomId: string; row: FrameRow }[]; left: { roomId: string; id: string }[]; truncated: boolean };
+type Changes = { waiting: number; rows: { roomId: string; row: FrameRow }[]; left: { roomId: string; id: string }[]; truncated: boolean };
 
 /** Fold changes into the room frames. Only this ticker writes frames, so it never conflicts. */
 export const writeFrames = internalMutation({
@@ -338,6 +345,8 @@ export const tick = internalAction({
     const upTo: number = ch.truncated ? Math.max(...ch.rows.map((r) => r.row[8]), since + 1) : until;
     const r: { stop: boolean; online: number; interval: number } = await ctx.runMutation(internal.presence.writeFrames, { gen, until: upTo, rows: ch.rows, left: ch.left });
     if (r.stop) return { stopped: true };
+    // People are waiting to come in: let the next ones in as room frees up.
+    if (ch.waiting > 0) await ctx.runMutation(internal.queue.admit, {});
     // Keep ticking while anyone is around; join() restarts the loop otherwise.
     if (!once && (r.online > 0 || ch.rows.length || ch.left.length)) await ctx.scheduler.runAfter(r.interval, internal.presence.tick, { gen });
     return { stopped: false, online: r.online, changed: ch.rows.length, left: ch.left.length };
