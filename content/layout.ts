@@ -81,6 +81,9 @@ const MAIN_W = 16;
 const MAIN_L = 24;
 const MAIN_DOOR_Z = [-7.5, -2.5, 2.5, 7.5];
 
+/** Shared with rendering and navigation so benches reserve the entrance sign's bay. */
+export const INTRO_PANEL_INSET = 7.6;
+
 export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
   const exhibits: ExhibitPlacement[] = [];
   const doors: DoorPlacement[] = [];
@@ -178,7 +181,14 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
     for (const [pair, list] of byPair) {
       if (pair % 3 !== 1) continue;
       const preferLeft = Math.floor(pair / 3) % 2 === 0;
-      const pick = [...list].sort((a, b) => Number((b.idx % 2 === 0) === preferLeft) - Number((a.idx % 2 === 0) === preferLeft)).find((f) => f.clear);
+      const pick = [...list].sort((a, b) => Number((b.idx % 2 === 0) === preferLeft) - Number((a.idx % 2 === 0) === preferLeft)).find((f) => {
+        if (!f.clear) return false;
+        const z = exhibits[f.exhibit].z;
+        // The rotated entrance panel occupies the left side of this bay.
+        // Include the bench's length and room to approach or stand up.
+        if (f.idx % 2 === 0 && Math.abs(z - (half - INTRO_PANEL_INSET)) < 2.5) return false;
+        return sections.every((s) => Math.abs(s.z - z) > 1.5);
+      });
       if (!pick) continue;
       const e = exhibits[pick.exhibit];
       const left = pick.idx % 2 === 0;
@@ -186,8 +196,6 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
       // With a bench in front, the standing viewing spot moves between bench and painting.
       e.spawn = { ...e.spawn, x: left ? e.x + 1.9 : e.x - 1.9 };
     }
-    // Keep benches clear of section signs.
-    shape.benches = benches.filter((b) => sections.every((s) => Math.abs(s.z - b.z) > 1.5));
 
     // Entrance (back to the Main Hall) and onward door to the next gallery.
     const next = galleries[gi + 1]?.id ?? "main";

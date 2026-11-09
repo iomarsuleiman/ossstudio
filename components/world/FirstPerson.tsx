@@ -8,7 +8,7 @@ import { BENCH_HALF_DEPTH, BENCH_HALF_LENGTH, BENCH_SEATS, seatPose } from "@/co
 import type { WorldStore } from "@/lib/worldStore";
 import { NavGrid, type Collider } from "@/lib/nav";
 import { INSTALLATION_OFFSET, hasInstallation } from "./Installation";
-import { INTRO_PANEL_INSET } from "./RoomScene";
+import { INTRO_PANEL_INSET } from "@/content/layout";
 
 // First-person movement with a graceful, weighted feel: you ease into a walk
 // and drift to a stop, the view turns smoothly, and the camera sways and
