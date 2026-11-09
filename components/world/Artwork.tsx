@@ -81,7 +81,11 @@ export function Artwork({
   useFrame((_, dt) => {
     const near = store.nearby?.id === exhibit.id ? 1 : 0;
     glow.current += (near - glow.current) * (1 - Math.exp(-dt / 0.25));
-    if (halo.current) halo.current.opacity = glow.current * 0.7;
+    if (halo.current) {
+      halo.current.opacity = glow.current * 0.7;
+      // A fully faded halo is skipped: no draw call, no transparent overdraw.
+      halo.current.visible = glow.current > 0.01;
+    }
     if (group.current) {
       const s = 1 + glow.current * 0.025;
       group.current.scale.setScalar(s);

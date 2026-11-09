@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { BenchPlacement, DoorPlacement, GalleryContent, Locale, Room, RoomId, RoomShape } from "@/content";
 import { paintSign } from "@/lib/painter";
@@ -13,6 +13,7 @@ import { Installation } from "./Installation";
 import { EntranceMap } from "./EntranceMap";
 import { ATMOSPHERE, FOG, glowMaterial, mix, paintMaterial, skyMaterial, waterMaterial, type Atmosphere } from "./paint";
 import { archShape, archTube, hillShape, slabGeometry } from "./shapes";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export const INTRO_PANEL_INSET = 7.6;
 const DOOR_W = 3.0;
@@ -40,8 +41,10 @@ function Sky({ a }: { a: Atmosphere }) {
   const mat = useDisposable(() => skyMaterial(a), [a]);
   useFrame(({ clock }) => { mat.uniforms.uTime.value = clock.elapsedTime; });
   return (
-    <mesh material={mat} renderOrder={-10} frustumCulled={false}>
-      <sphereGeometry args={[160, 48, 24]} />
+    // Drawn after the opaque scenery, so the depth test skips every sky pixel
+    // that a hill, arch or the walkway already covers.
+    <mesh material={mat} renderOrder={100} frustumCulled={false} raycast={() => null}>
+      <sphereGeometry args={[160, 32, 16]} />
     </mesh>
   );
 }
@@ -234,24 +237,27 @@ function DestinationMarker({ store, color }: { store: WorldStore; color: string 
 
 // --- Painted scenery beyond the walkway -------------------------------------------------
 
-function Tree({ x, z, h, a, seed }: { x: number; z: number; h: number; a: Atmosphere; seed: number }) {
-  const trunk = useMemo(() => {
-    const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.15 * Math.sin(seed), h * 0.45, 0), new THREE.Vector3(-0.1 * Math.cos(seed), h * 0.85, 0.05)];
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.07, 8, false);
-  }, [h, seed]);
-  useEffect(() => () => trunk.dispose(), [trunk]);
-  const mat = useDisposable(() => paintMaterial({ top: mix(a.monument, a.glow, 0.2), bottom: mix(a.monument, "#2a2525", 0.25), fog: a.horizon, y0: 0, y1: h * 1.3, rimAmount: 0.45, rim: a.glow }), [a, h]);
-  return (
-    <group position={[x, -0.2, z]}>
-      <mesh geometry={trunk} material={mat} />
-      <mesh material={mat} position={[0, h * 0.95, 0]} scale={[h * 0.32, h * 0.42, h * 0.32]}>
-        <sphereGeometry args={[1, 32, 24]} />
-      </mesh>
-      <mesh material={mat} position={[h * 0.18, h * 0.78, 0.1]} scale={[h * 0.2, h * 0.24, h * 0.2]}>
-        <sphereGeometry args={[1, 24, 16]} />
-      </mesh>
-    </group>
-  );
+/** All of a room's trees as one mesh (trunks and canopies share one paint). */
+function Trees({ trees, a }: { trees: { x: number; z: number; h: number; seed: number }[]; a: Atmosphere }) {
+  const geo = useDisposable(() => {
+    const parts: THREE.BufferGeometry[] = [];
+    const m = new THREE.Matrix4();
+    for (const { x, z, h, seed } of trees) {
+      const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.15 * Math.sin(seed), h * 0.45, 0), new THREE.Vector3(-0.1 * Math.cos(seed), h * 0.85, 0.05)];
+      const trunk = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.07, 6, false);
+      trunk.applyMatrix4(m.makeTranslation(x, -0.2, z));
+      const crown = new THREE.SphereGeometry(1, 18, 12);
+      crown.applyMatrix4(m.compose(new THREE.Vector3(x, -0.2 + h * 0.95, z), new THREE.Quaternion(), new THREE.Vector3(h * 0.32, h * 0.42, h * 0.32)));
+      const tuft = new THREE.SphereGeometry(1, 14, 10);
+      tuft.applyMatrix4(m.compose(new THREE.Vector3(x + h * 0.18, -0.2 + h * 0.78, z + 0.1), new THREE.Quaternion(), new THREE.Vector3(h * 0.2, h * 0.24, h * 0.2)));
+      parts.push(trunk, crown, tuft);
+    }
+    const merged = parts.length ? mergeGeometries(parts) : new THREE.BufferGeometry();
+    parts.forEach((g) => g.dispose());
+    return merged;
+  }, [trees]);
+  const mat = useMemo(() => paintMaterial({ top: mix(a.monument, a.glow, 0.2), bottom: mix(a.monument, "#2a2525", 0.25), fog: a.horizon, y0: -0.2, y1: 5, rimAmount: 0.45, rim: a.glow }), [a]);
+  return <mesh geometry={geo} material={mat} raycast={() => null} />;
 }
 
 type Monument =
@@ -277,40 +283,67 @@ function planMonuments(roomId: RoomId, shape: RoomShape): Monument[] {
 
 function Monuments({ roomId, shape, a }: { roomId: RoomId; shape: RoomShape; a: Atmosphere }) {
   const list = useMemo(() => planMonuments(roomId, shape), [roomId, shape]);
-  const solid = useDisposable(() => paintMaterial({ top: mix(a.monument, a.zenith, 0.35), bottom: mix(a.monument, a.water, 0.2), fog: a.horizon, y0: -1, y1: 30, grain: 0.08, rimAmount: 0.4, rim: a.glow, fogNear: 20, fogFar: 140 }), [a]);
-  const orbMat = useDisposable(() => paintMaterial({ top: a.glow, bottom: mix(a.glow, a.zenith, 0.5), fog: a.horizon, y0: 0, y1: 25, rimAmount: 0.2, fogNear: 30, fogFar: 160 }), [a]);
+  const solid = useMemo(() => paintMaterial({ top: mix(a.monument, a.zenith, 0.35), bottom: mix(a.monument, a.water, 0.2), fog: a.horizon, y0: -1, y1: 30, grain: 0.08, rimAmount: 0.4, rim: a.glow, fogNear: 20, fogFar: 140 }), [a]);
+  const orbMat = useMemo(() => paintMaterial({ top: a.glow, bottom: mix(a.glow, a.zenith, 0.5), fog: a.horizon, y0: 0, y1: 25, rimAmount: 0.2, fogNear: 30, fogFar: 160 }), [a]);
   const hillMats = useMemo(() => [0, 1, 2, 3, 4].map((l) => paintMaterial({
     top: mix(a.monument, a.horizon, 0.25 + l * 0.14), bottom: mix(a.water, a.horizon, 0.2 + l * 0.12), fog: a.horizon, y0: 0, y1: 14, grain: 0.06, rimAmount: 0, fogNear: 30, fogFar: 170, side: THREE.DoubleSide,
   })), [a]);
-  useEffect(() => () => hillMats.forEach((m) => m.dispose()), [hillMats]);
-  // Slender tapering spire with a gentle swelling, like a tall seed pod.
-  const spireGeo = useDisposable(() => new THREE.LatheGeometry(
-    Array.from({ length: 24 }, (_, i) => {
-      const t = i / 23;
+
+  // The distant architecture never moves: arches, the ring and the spires are
+  // one mesh, and each layer of hills is one mesh. A room's whole skyline is
+  // a handful of draw calls instead of dozens.
+  const { solidGeo, hillGeos } = useMemo(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const solids: THREE.BufferGeometry[] = [];
+    const hills: THREE.BufferGeometry[][] = [[], [], [], [], []];
+    const spire = new THREE.LatheGeometry(Array.from({ length: 18 }, (_, i) => {
+      const t = i / 17;
       return new THREE.Vector2(Math.max(0.001, 0.9 * Math.pow(1 - t, 1.4) * (1 + 0.35 * Math.sin(t * Math.PI))), t);
-    }), 40,
-  ), []);
+    }), 24);
+    for (const mo of list) {
+      if (mo.kind === "arch") {
+        const g = archTube(mo.w, mo.h, mo.w * 0.05);
+        g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -0.8, mo.z), q.setFromEuler(new THREE.Euler(0, mo.rot, 0)), new THREE.Vector3(1, 1, 1)));
+        solids.push(g);
+      } else if (mo.kind === "ring") {
+        const g = new THREE.TorusGeometry(mo.r, mo.r * 0.08, 14, 64);
+        g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -1, mo.z), q.setFromEuler(new THREE.Euler(0, mo.rot, 0)), new THREE.Vector3(1, 1, 1)));
+        solids.push(g);
+      } else if (mo.kind === "spire") {
+        const g = spire.clone();
+        g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -0.6, mo.z), q.identity(), new THREE.Vector3(mo.h * 0.08, mo.h, mo.h * 0.08)));
+        solids.push(g);
+      } else if (mo.kind === "hill") {
+        const g = new THREE.ShapeGeometry(hillShape(mo.w, mo.h, 2 + (mo.layer % 3), rng(`hill${mo.x}${mo.z}`)), 1);
+        const facing = Math.abs(mo.x) > 30 ? (mo.x > 0 ? -Math.PI / 2 : Math.PI / 2) : 0;
+        g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -0.6, mo.z), q.setFromEuler(new THREE.Euler(0, facing, 0)), new THREE.Vector3(1, 1, 1)));
+        hills[mo.layer % 5].push(g);
+      }
+    }
+    spire.dispose();
+    const merge = (gs: THREE.BufferGeometry[]) => {
+      if (!gs.length) return null;
+      const out = mergeGeometries(gs);
+      gs.forEach((g) => g.dispose());
+      return out;
+    };
+    return { solidGeo: merge(solids), hillGeos: hills.map(merge) };
+  }, [list]);
+  useEffect(() => () => { solidGeo?.dispose(); hillGeos.forEach((g) => g?.dispose()); }, [solidGeo, hillGeos]);
+
   const orbs = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     orbs.current?.children.forEach((c, i) => { c.position.y = (c.userData.y as number) + Math.sin(clock.elapsedTime * 0.25 + i) * 0.6; });
   });
   return (
     <group>
-      {list.map((m, i) => {
-        if (m.kind === "hill") return <Hill key={i} m={m} mat={hillMats[m.layer % 5]} />;
-        if (m.kind === "arch") return <BigArch key={i} m={m} mat={solid} />;
-        if (m.kind === "ring") return (
-          <mesh key={i} material={solid} position={[m.x, -1, m.z]} rotation={[0, m.rot, 0]}>
-            <torusGeometry args={[m.r, m.r * 0.08, 24, 96]} />
-          </mesh>
-        );
-        if (m.kind === "spire") return <mesh key={i} geometry={spireGeo} material={solid} position={[m.x, -0.6, m.z]} scale={[m.h * 0.08, m.h, m.h * 0.08]} />;
-        return null;
-      })}
+      {solidGeo && <mesh geometry={solidGeo} material={solid} raycast={() => null} />}
+      {hillGeos.map((g, i) => g && <mesh key={i} geometry={g} material={hillMats[i]} raycast={() => null} />)}
       <group ref={orbs}>
         {list.filter((m): m is Extract<Monument, { kind: "orb" }> => m.kind === "orb").map((m, i) => (
-          <mesh key={i} material={orbMat} position={[m.x, m.y, m.z]} userData={{ y: m.y }}>
-            <sphereGeometry args={[m.r, 32, 24]} />
+          <mesh key={i} material={orbMat} position={[m.x, m.y, m.z]} userData={{ y: m.y }} raycast={() => null}>
+            <sphereGeometry args={[m.r, 20, 14]} />
           </mesh>
         ))}
       </group>
@@ -318,21 +351,14 @@ function Monuments({ roomId, shape, a }: { roomId: RoomId; shape: RoomShape; a: 
   );
 }
 
-function Hill({ m, mat }: { m: Extract<Monument, { kind: "hill" }>; mat: THREE.Material }) {
-  const geo = useDisposable(() => new THREE.ShapeGeometry(hillShape(m.w, m.h, 2 + (m.layer % 3), rng(`hill${m.x}${m.z}`)), 1), [m]);
-  const facing = Math.abs(m.x) > 30 ? (m.x > 0 ? -Math.PI / 2 : Math.PI / 2) : 0;
-  return <mesh geometry={geo} material={mat} position={[m.x, -0.6, m.z]} rotation={[0, facing, 0]} raycast={() => null} />;
-}
-
-function BigArch({ m, mat }: { m: Extract<Monument, { kind: "arch" }>; mat: THREE.Material }) {
-  const geo = useDisposable(() => archTube(m.w, m.h, m.w * 0.05), [m.w, m.h]);
-  return <mesh geometry={geo} material={mat} position={[m.x, -0.8, m.z]} rotation={[0, m.rot, 0]} raycast={() => null} />;
-}
-
-/** Slowly drifting petals and dust motes. */
-function Motes({ shape, color }: { shape: RoomShape; color: string }) {
+/**
+ * Slowly drifting petals and dust motes, animated entirely on the GPU: the
+ * positions never change on the CPU, a time uniform moves them.
+ */
+function Motes({ shape, color, store }: { shape: RoomShape; color: string; store: WorldStore }) {
   const COUNT = 260;
-  const { geo, seeds } = useMemo(() => {
+  const { size } = useThree();
+  const geo = useMemo(() => {
     const r = rng(`motes${shape.roomId}`);
     const pos = new Float32Array(COUNT * 3);
     const seeds = new Float32Array(COUNT);
@@ -344,39 +370,54 @@ function Motes({ shape, color }: { shape: RoomShape; color: string }) {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    return { geo: g, seeds };
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 3.5, 0), Math.max(shape.width, shape.length) + 20);
+    return g;
   }, [shape]);
   useEffect(() => () => geo.dispose(), [geo]);
-  const sprite = useDisposable(() => {
-    const c = document.createElement("canvas");
-    c.width = c.height = 64;
-    const ctx = c.getContext("2d")!;
-    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.4, "rgba(255,255,255,0.6)");
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 64, 64);
-    return new THREE.CanvasTexture(c);
-  }, []);
-  const reduced = useMemo(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
-  useFrame((_, dt) => {
-    if (reduced) return;
-    const p = geo.attributes.position as THREE.BufferAttribute;
-    const t = performance.now() / 1000;
-    for (let i = 0; i < COUNT; i++) {
-      let y = p.getY(i) + dt * (0.08 + (seeds[i] % 1) * 0.1);
-      if (y > 7.5) y = 0;
-      p.setY(i, y);
-      p.setX(i, p.getX(i) + Math.sin(t * 0.3 + seeds[i]) * dt * 0.12);
-    }
-    p.needsUpdate = true;
+  const mat = useDisposable(() => new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(color) }, uScale: { value: 400 }, uFogNear: { value: FOG.near }, uFogFar: { value: FOG.far } },
+    vertexShader: /* glsl */ `
+      attribute float aSeed;
+      uniform float uTime;
+      uniform float uScale;
+      varying float vFade;
+      void main() {
+        vec3 p = position;
+        float speed = 0.08 + fract(aSeed) * 0.1;
+        p.y = mod(position.y + uTime * speed, 7.5);
+        p.x += -0.4 * cos(uTime * 0.3 + aSeed);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = 0.09 * uScale / -mv.z;
+        vFade = 0.85 * smoothstep(0.0, 0.4, p.y) * (1.0 - smoothstep(7.0, 7.5, p.y));
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      uniform float uFogNear;
+      uniform float uFogFar;
+      varying float vFade;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        float a = (1.0 - smoothstep(0.4, 1.0, d)) * vFade;
+        if (a < 0.01) discard;
+        float depth = gl_FragCoord.z / gl_FragCoord.w;
+        a *= 1.0 - smoothstep(uFogNear, uFogFar, depth);
+        gl_FragColor = vec4(uColor, a);
+        #include <colorspace_fragment>
+      }
+    `,
+  }), [color]);
+  useFrame(({ clock, gl }) => {
+    if (store.reducedMotion) return;
+    mat.uniforms.uTime.value = clock.elapsedTime;
+    mat.uniforms.uScale.value = size.height * 0.5 * gl.getPixelRatio();
   });
-  return (
-    <points geometry={geo} raycast={() => null}>
-      <pointsMaterial map={sprite} color={color} size={0.09} transparent opacity={0.85} depthWrite={false} sizeAttenuation />
-    </points>
-  );
+  if (store.quality === "low") return null;
+  return <points geometry={geo} material={mat} raycast={() => null} />;
 }
 
 // --- Room ------------------------------------------------------------------------------------
@@ -421,7 +462,7 @@ export function RoomScene({
       <Sky a={a} />
       <Water a={a} />
       <Monuments roomId={room.id} shape={shape} a={a} />
-      {trees.map((t, i) => <Tree key={i} {...t} a={a} />)}
+      <Trees trees={trees} a={a} />
       <Walkway shape={shape} a={a} accent={room.palette.accent} store={store} onFloorClick={onFloorClick} />
       {!isMain && <GateArches shape={shape} a={a} />}
       {!isMain && <IntroPanel room={room} locale={locale} shape={shape} a={a} />}
@@ -438,7 +479,7 @@ export function RoomScene({
       {doors.map((d) => <Portal key={`${d.side}${d.to}`} door={d} content={content} locale={locale} a={a} />)}
       {shape.benches.map((b, i) => <Bench key={i} bench={b} index={i} a={a} store={store} />)}
       <DestinationMarker store={store} color={a.glow} />
-      <Motes shape={shape} color={a.glow} />
+      <Motes shape={shape} color={a.glow} store={store} />
 
       {exhibits.map((e) => {
         const project = content.projects.find((p) => p.slug === e.slug)!;

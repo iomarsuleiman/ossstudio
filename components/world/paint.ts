@@ -8,14 +8,56 @@ export { ATMOSPHERE, type Atmosphere };
 
 export const FOG = { near: 16, far: 78 };
 
-const NOISE = /* glsl */ `
-  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+// Watercolour mottling used to be computed per pixel (two 4-octave value
+// noises, ~32 sin() calls for every pixel of every surface). It now comes
+// from one small tileable texture computed once: same look, a fraction of
+// the cost. Red = 4-octave fbm, green = single-octave noise.
+const NOISE_SIZE = 256;
+const NOISE_CELLS = 32; // lattice cells across the texture at the first octave
+let noiseTex: THREE.DataTexture | null = null;
+export function noiseTexture() {
+  if (noiseTex) return noiseTex;
+  const N = NOISE_SIZE;
+  const lattice = (period: number, seed: number) => {
+    const v = new Float32Array(period * period);
+    let x = seed * 9301 + 49297;
+    for (let i = 0; i < v.length; i++) { x = (x * 16807) % 2147483647; v[i] = x / 2147483647; }
+    return (i: number, j: number) => v[((j % period + period) % period) * period + ((i % period + period) % period)];
+  };
+  const octave = (period: number, seed: number) => {
+    const at = lattice(period, seed);
+    const out = new Float32Array(N * N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const fx = (x / N) * period, fy = (y / N) * period;
+      const ix = Math.floor(fx), iy = Math.floor(fy);
+      const ux = fx - ix, uy = fy - iy;
+      const sx = ux * ux * (3 - 2 * ux), sy = uy * uy * (3 - 2 * uy);
+      const a = at(ix, iy), b = at(ix + 1, iy), c = at(ix, iy + 1), d = at(ix + 1, iy + 1);
+      out[y * N + x] = a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+    }
+    return out;
+  };
+  const o = [octave(NOISE_CELLS, 1), octave(NOISE_CELLS * 2, 2), octave(NOISE_CELLS * 4, 3), octave(NOISE_CELLS * 8, 4)];
+  const data = new Uint8Array(N * N * 4);
+  for (let i = 0; i < N * N; i++) {
+    const f = 0.5 * o[0][i] + 0.25 * o[1][i] + 0.125 * o[2][i] + 0.0625 * o[3][i];
+    data[i * 4] = Math.round(f * 255);
+    data[i * 4 + 1] = Math.round(o[0][i] * 255);
+    data[i * 4 + 3] = 255;
   }
-  float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
+  noiseTex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
+  noiseTex.magFilter = THREE.LinearFilter;
+  noiseTex.minFilter = THREE.LinearFilter;
+  noiseTex.generateMipmaps = false;
+  noiseTex.needsUpdate = true;
+  return noiseTex;
+}
+
+const NOISE = /* glsl */ `
+  uniform sampler2D uNoise;
+  float fbm(vec2 p) { return texture2D(uNoise, p / ${NOISE_CELLS.toFixed(1)}).r; }
+  float noise(vec2 p) { return texture2D(uNoise, p / ${NOISE_CELLS.toFixed(1)}).g; }
 `;
 
 const VERT = /* glsl */ `
@@ -79,7 +121,23 @@ export interface PaintOptions {
   fogFar?: number;
 }
 
+// Identical painted surfaces share one material (the same tree, panel or
+// arch colour appears dozens of times in a room). Shared materials live for
+// the page's lifetime, so dispose() is a no-op for them and revisiting a
+// room never rebuilds them.
+const paintCache = new Map<string, THREE.ShaderMaterial>();
 export function paintMaterial(o: PaintOptions) {
+  const key = JSON.stringify(o);
+  let m = paintCache.get(key);
+  if (!m) {
+    m = createPaintMaterial(o);
+    m.dispose = () => {};
+    paintCache.set(key, m);
+  }
+  return m;
+}
+
+function createPaintMaterial(o: PaintOptions) {
   return new THREE.ShaderMaterial({
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -98,6 +156,7 @@ export function paintMaterial(o: PaintOptions) {
       uGrain: { value: o.grain ?? 0.12 },
       uRimAmount: { value: o.rimAmount ?? 0.35 },
       uOpacity: { value: o.opacity ?? 1 },
+      uNoise: { value: noiseTexture() },
     },
   });
 }
@@ -113,6 +172,7 @@ export function skyMaterial(a: Atmosphere) {
       uHorizon: { value: new THREE.Color(a.horizon) },
       uGlow: { value: new THREE.Color(a.glow) },
       uTime: { value: 0 },
+      uNoise: { value: noiseTexture() },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -159,6 +219,7 @@ export function waterMaterial(a: Atmosphere) {
       uTime: { value: 0 },
       uFogNear: { value: FOG.near },
       uFogFar: { value: FOG.far },
+      uNoise: { value: noiseTexture() },
     },
     vertexShader: VERT,
     fragmentShader: /* glsl */ `
@@ -202,6 +263,7 @@ export function glowMaterial(color: string, edge: string, opacity = 1, w = 1, h 
       uTime: { value: 0 },
       uOpacity: { value: opacity },
       uSize: { value: new THREE.Vector2(w, h) },
+      uNoise: { value: noiseTexture() },
     },
     vertexShader: /* glsl */ `
       uniform vec2 uSize;

@@ -142,6 +142,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const later = (fn: () => void, ms: number) => { timers.current.push(window.setTimeout(fn, ms)); };
 
   const room = content.rooms.find((r) => r.id === roomId)!;
+  // The room React has actually committed (room switches render as a transition).
+  const committedRoom = useRef<RoomId>(roomId);
+  useEffect(() => { committedRoom.current = roomId; }, [roomId]);
   const openProject = openSlug ? content.projects.find((p) => p.slug === openSlug) ?? null : null;
 
   // --- environment ---------------------------------------------------------------
@@ -194,8 +197,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     if (!new URLSearchParams(window.location.search).has("debug")) return;
     (window as unknown as { __gallery: WorldStore; __net: NetStore }).__gallery = store;
     (window as unknown as { __net: NetStore }).__net = net;
+    (window as unknown as { __content: GalleryContent }).__content = content;
     setDebug(true);
-  }, [store, net]);
+  }, [store, net, content]);
 
   // --- persistence (keeps your place across language switches & reloads) ----
   const persist = useCallback(() => {
@@ -244,7 +248,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       store.snapCamera = true;
       setSelected(null);
       setNearMap(false);
-      setRoomId(to);
+      // Mounting a room is the heaviest React work in the app: let React
+      // spread it over several frames so the veil keeps animating smoothly.
+      startTransition(() => setRoomId(to));
       window.history.replaceState(null, "", roomPath(locale, to));
       // Lift the veil as soon as the destination's artworks are painted and
       // uploaded (no fake waiting), with a short floor so the room has drawn
@@ -253,8 +259,9 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       const startWait = performance.now();
       const reveal = () => {
         const waited = performance.now() - startWait;
-        const ready = store.texturesPending === 0 && destination.every((p) => isArtworkReady(p.slug));
-        if (waited < 140 || (!ready && waited < 1100)) { later(reveal, 50); return; }
+        const ready = committedRoom.current === to && store.texturesPending === 0 && destination.every((p) => isArtworkReady(p.slug));
+        // Never reveal before the new room is actually on screen.
+        if (waited < 140 || (!ready && waited < 1100) || committedRoom.current !== to) { later(reveal, 50); return; }
         if (vt) startTransition(() => setVeil(null));
         else {
           setVeil({ to, leaving: true });
@@ -364,7 +371,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       setNearDoor(to);
       // Paint the next room's artworks before you reach the door.
       queue?.prioritise((t) => t.key.startsWith(`art:${to}:`));
-      projectsShownIn(content, to).forEach((p) => { artworkUrl(p, roomFor(content, p)).catch(() => {}); });
+      projectsShownIn(content, to).forEach((p) => { artworkUrl(p, roomFor(content, p), { background: true }).catch(() => {}); });
     };
     store.onDoor = onDoor;
     store.onStep = () => audio.footstep();
@@ -581,7 +588,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         const key = `art:${rid}:${p.slug}`;
         if (queuedArt.current.has(p.slug) && isArtworkReady(p.slug)) continue;
         queuedArt.current.add(p.slug);
-        tasks.push({ key, group: "artworks", priority: 2 + distance * 0.1, run: () => artworkUrl(p, roomFor(content, p)) });
+        tasks.push({ key, group: "artworks", priority: 2 + distance * 0.1, run: () => artworkUrl(p, roomFor(content, p), { background: true }) });
       }
     });
     // Forget rooms you can no longer walk to, then queue what's nearby.
@@ -636,12 +643,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       <div className={`wash-wrap${reduced ? " is-reduced" : ""}`} aria-hidden="true">
         <div className={`wash wash-${wash.kind} is-${wash.phase}`} style={{ ["--wash" as string]: wash.color }} />
       </div>
-      <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
-        <filter id="ink-edge">
-          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="3" seed="7" />
-          <feDisplacementMap in="SourceGraphic" scale="70" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-      </svg>
 
       {showHud && (
         <header className="hud-top">
