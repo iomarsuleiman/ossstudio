@@ -23,7 +23,7 @@ import { GiftShop } from "./GiftShop";
 import { collection, useCollection } from "@/lib/collection";
 import { NetStore } from "@/lib/multiplayer/net";
 import { ownerKey } from "@/lib/multiplayer/local";
-import { MultiplayerLayer, multiplayerEnabled, type ChatRequest } from "./multiplayer/MultiplayerLayer";
+import { MultiplayerLayer, multiplayerEnabled } from "./multiplayer/MultiplayerLayer";
 import { PerfOverlay } from "./multiplayer/PerfOverlay";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
@@ -104,13 +104,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   if (!netRef.current) netRef.current = new NetStore();
   const net = netRef.current;
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
-  const onChatWith = useCallback((visitorId: string) => {
-    if (document.pointerLockElement) document.exitPointerLock();
-    setChatRequest({ tab: "messages", with: visitorId, nonce: Date.now() });
-    setChatOpen(true);
-  }, []);
-
   const [entered, setEntered] = useState(start.entered);
   const [roomId, setRoomId] = useState<RoomId>(start.roomId);
   const [openSlug, setOpenSlug] = useState<string | null>(start.exhibit ? start.exhibit.slug : null);
@@ -627,7 +620,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             roomId={roomId}
             store={store}
             net={net}
-            onChatWith={onChatWith}
             onReady={() => setReady(true)}
             onExhibitClick={onExhibitClick}
             onFloorClick={onFloorClick}
@@ -787,8 +779,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         hud={showHud && !mapOpen && !shelfOpen && !checkout}
         chatOpen={chatOpen && showHud}
         setChatOpen={setChatOpen}
-        request={chatRequest}
-        onNotify={() => audio.chime()}
         entryRequested={entryRequested}
         onAdmitted={finishEntering}
         onEntryCancelled={() => { setEntryRequested(false); if (!audio.muted) { audio.disable(); setSound(false); } }}

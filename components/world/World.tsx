@@ -38,10 +38,9 @@ function SceneAtmosphere({ roomId }: { roomId: RoomId }) {
 }
 
 export default function World({
-  content, locale, roomId, store, net, onReady, onExhibitClick, onFloorClick, onMapRoom, onChatWith,
+  content, locale, roomId, store, net, onReady, onExhibitClick, onFloorClick, onMapRoom,
 }: {
   net: NetStore;
-  onChatWith: (visitorId: string) => void;
   content: GalleryContent;
   locale: Locale;
   roomId: RoomId;
@@ -100,7 +99,7 @@ export default function World({
       <group key={`here:${roomId}`}>
         <FirstPerson content={content} room={room} store={store} />
         <Figure store={store} atmosphere={ATMOSPHERE[room.id]} />
-        <RemoteVisitors net={net} store={store} atmosphere={ATMOSPHERE[room.id]} onChat={onChatWith} />
+        <RemoteVisitors net={net} store={store} atmosphere={ATMOSPHERE[room.id]} />
       </group>
     </Canvas>
   );

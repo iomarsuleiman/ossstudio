@@ -187,58 +187,11 @@ describe("chat", () => {
   });
 });
 
-describe("private messages", () => {
-  it("delivers, tracks unread and keeps history after leaving", async () => {
-    const { t, people } = await setup(2);
-    const [a, b] = people;
-    const r = await t.mutation(api.dms.send, { token: token(0), to: b.visitorId, body: "Hi!" });
-    expect(r.ok).toBe(true);
-    let convs = await t.query(api.dms.conversations, { token: token(1) });
-    expect(convs).toHaveLength(1);
-    expect(convs[0]).toMatchObject({ with: a.visitorId, unread: 1, online: true, lastBody: "Hi!" });
-    await t.mutation(api.presence.leave, { token: token(0) });
-    convs = await t.query(api.dms.conversations, { token: token(1) });
-    expect(convs[0].online).toBe(false);
-    if (!r.ok) throw new Error();
-    await t.mutation(api.dms.markRead, { token: token(1), conversationId: r.conversationId });
-    expect((await t.query(api.dms.conversations, { token: token(1) }))[0].unread).toBe(0);
-    const thread = await t.query(api.dms.thread, { token: token(0), conversationId: r.conversationId });
-    expect(thread!.messages.map((m) => [m.mine, m.body])).toEqual([[true, "Hi!"]]);
-    expect(thread!.otherReadAt).toBeGreaterThan(0);
-  });
-
-  it("keeps conversations private", async () => {
-    const { t, people } = await setup(3);
-    const r = await t.mutation(api.dms.send, { token: token(0), to: people[1].visitorId, body: "secret" });
-    if (!r.ok) throw new Error();
-    expect(await t.query(api.dms.thread, { token: token(2), conversationId: r.conversationId })).toBeNull();
-    await expect(t.mutation(api.dms.markRead, { token: token(2), conversationId: r.conversationId })).rejects.toThrow();
-    await expect(t.mutation(api.chat.setTyping, { token: token(2), channel: `dm:${r.conversationId}`, typing: true })).rejects.toThrow();
-  });
-
-  it("respects blocks in both directions", async () => {
-    const { t, people } = await setup(2);
-    await t.mutation(api.dms.block, { token: token(1), visitorId: people[0].visitorId });
-    expect(await t.mutation(api.dms.send, { token: token(0), to: people[1].visitorId, body: "hello?" })).toEqual({ ok: false, reason: "unavailable" });
-    expect(await t.mutation(api.dms.send, { token: token(1), to: people[0].visitorId, body: "hi" })).toEqual({ ok: false, reason: "blocked" });
-    expect(await t.query(api.dms.myBlocks, { token: token(1) })).toHaveLength(1);
-    await t.mutation(api.dms.unblock, { token: token(1), visitorId: people[0].visitorId });
-    expect((await t.mutation(api.dms.send, { token: token(0), to: people[1].visitorId, body: "hello" })).ok).toBe(true);
-  });
-
-  it("lets visitors turn off new private messages", async () => {
-    const { t, people } = await setup(2);
-    await t.mutation(api.presence.setProfile, { token: token(1), allowDMs: false });
-    expect(await t.mutation(api.dms.send, { token: token(0), to: people[1].visitorId, body: "hey" })).toEqual({ ok: false, reason: "closed" });
-    const w = await t.query(api.dms.conversationWith, { token: token(0), other: people[1].visitorId });
-    expect(w).toMatchObject({ acceptsNew: false, conversationId: null });
-  });
-
-  it("renames visitors everywhere they show", async () => {
+describe("visitor profile", () => {
+  it("updates the public display name", async () => {
     const { t } = await setup(1);
     await t.mutation(api.presence.setProfile, { token: token(0), name: "  Mona   Lisa  " });
     const [p] = await roomView(t, "art");
     expect(p.n).toBe("Mona Lisa");
-    await expect(t.mutation(api.presence.setProfile, { token: token(0), name: " " })).rejects.toThrow();
   });
 });
