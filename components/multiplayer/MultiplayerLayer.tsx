@@ -3,17 +3,16 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ConvexProvider, ConvexReactClient, useConvex, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
 import type { GalleryContent, Locale, RoomId } from "@/content";
 import type { NetStore, RemoteRow } from "@/lib/multiplayer/net";
-import { identityToken, mutes } from "@/lib/multiplayer/local";
+import { identityToken } from "@/lib/multiplayer/local";
 import { MP } from "@/lib/multiplayer/strings";
 import type { WorldStore } from "@/lib/worldStore";
 import { DevClient } from "@/lib/multiplayer/devClient";
-import { ChatPanel, type ChatTab } from "./ChatPanel";
+import { ChatPanel } from "./ChatPanel";
 import { QueueGate } from "./QueueGate";
 
-// Everything live: presence, avatars' data, chats and private messages. It is
+// Live visitor presence, room chat and gallery chat. The network layer is
 // optional and isolated: without NEXT_PUBLIC_CONVEX_URL it renders nothing,
 // and if Convex fails or is overloaded the error boundary and back-off below
 // switch live features off while the gallery itself keeps working.
@@ -37,8 +36,6 @@ function getClient() {
   return client;
 }
 
-export interface ChatRequest { tab: ChatTab; with?: string; nonce: number }
-
 export interface MultiplayerProps {
   net: NetStore;
   store: WorldStore;
@@ -50,8 +47,6 @@ export interface MultiplayerProps {
   hud: boolean;
   chatOpen: boolean;
   setChatOpen: (open: boolean) => void;
-  request: ChatRequest | null;
-  onNotify?: () => void;
   /** Set when the visitor pressed Enter: show the waiting line if the gallery is full. */
   entryRequested: boolean;
   onAdmitted: () => void;
@@ -99,9 +94,9 @@ class LiveBoundary extends Component<{ net: NetStore; locale: Locale; onRetry: (
   }
 }
 
-type Me = { id: string; name: string; color: string; allowDMs: boolean };
+type Me = { id: string; name: string; color: string };
 
-function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, setChatOpen, request, onNotify }: MultiplayerProps) {
+function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, setChatOpen }: MultiplayerProps) {
   const convex = useConvex();
   const t = MP[locale];
   const token = useMemo(identityToken, []);
@@ -115,7 +110,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
     const r = await convex.mutation(api.presence.join, { token, roomId: store.roomId, x: store.pos.x, z: store.pos.z, yaw: store.yaw });
     interval.current = r.interval;
     joinedRoom.current = store.roomId;
-    const m = { id: r.visitorId, name: r.name, color: r.color, allowDMs: r.allowDMs };
+    const m = { id: r.visitorId, name: r.name, color: r.color };
     setMe(m);
     net.setMe(m);
     net.setStatus("live");
@@ -224,52 +219,13 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
     if (!frame || !me) return;
     let parsed: unknown[][] = [];
     try { parsed = JSON.parse(frame.data) as unknown[][]; } catch { return; }
-    const rows: RemoteRow[] = parsed.map(([id, n, c, x, z, y, m, s, t, o]) => ({ id: id as string, n: n as string, c: c as string, x: x as number, z: z as number, y: y as number, m: !!m, s: (s as string | null) ?? null, t: t as number, o: !!o }));
+    const rows: RemoteRow[] = parsed.map(([id, n, c, x, z, y, m, s, t]) => ({ id: id as string, n: n as string, c: c as string, x: x as number, z: z as number, y: y as number, m: !!m, s: (s as string | null) ?? null, t: t as number }));
     net.ingest(rows, frame.data.length);
     store.takenSeats = new Set(rows.filter((r) => r.id !== me.id && r.s).map((r) => r.s!));
   }, [frame, me, net, store]);
 
   const counts = useQuery(api.presence.counts, entered ? {} : "skip");
   useEffect(() => { if (counts) net.setCounts(counts); }, [counts, net]);
-
-  const blocks = useQuery(api.dms.myBlocks, me ? { token } : "skip");
-  useEffect(() => { if (blocks) net.setHidden(blocks.map((b) => b.id)); }, [blocks, net]);
-
-  // --- private message notifications -------------------------------------------------------
-  const convs = useQuery(api.dms.conversations, me ? { token } : "skip");
-  const [toast, setToast] = useState<{ conv: string; with: string; name: string } | null>(null);
-  const [viewing, setViewing] = useState<string | null>(null);
-  const seenAt = useRef<Map<string, number> | null>(null);
-  useEffect(() => {
-    if (!convs) return;
-    const prev = seenAt.current;
-    const next = new Map(convs.map((c) => [c.id as string, c.lastAt]));
-    seenAt.current = next;
-    if (!prev) return; // first load: no toasts for old messages
-    for (const c of convs) {
-      const before = prev.get(c.id) ?? 0;
-      if (c.lastAt > before && !c.lastFromMe && c.unread > 0 && !mutes.has(c.with) && !(chatOpen && viewing === c.id)) {
-        setToast({ conv: c.id, with: c.with, name: c.name });
-        onNotify?.();
-        break;
-      }
-    }
-  }, [convs, chatOpen, viewing, onNotify]);
-  useEffect(() => {
-    if (!toast) return;
-    const id = window.setTimeout(() => setToast(null), 7000);
-    return () => clearTimeout(id);
-  }, [toast]);
-  const unread = (convs ?? []).filter((c) => !mutes.has(c.with)).reduce((n, c) => n + c.unread, 0);
-
-  // Unread count in the tab title, so it shows even from another tab.
-  useEffect(() => {
-    const base = document.title.replace(/^\(\d+\) /, "");
-    document.title = unread ? `(${unread}) ${base}` : base;
-  }, [unread]);
-
-  const [ask, setAsk] = useState<ChatRequest | null>(null);
-  useEffect(() => { if (request) setAsk(request); }, [request]);
 
   const status = useSyncExternalStore(net.subscribe, () => net.status, () => net.status);
   const roomCount = Math.max(1, counts?.rooms[roomId] ?? 1);
@@ -279,23 +235,15 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
   return (
     <>
       {hud && (
-        <div className="live-hud">
+        <div className={`live-hud${chatOpen ? " is-chat-open" : ""}`}>
           <span className={`live-presence is-${status}`} aria-label={t.presenceLabel(roomCount, total)} title={t.status[status] || undefined}>
             <span className="live-dot" aria-hidden="true" />
             <span aria-hidden="true">{t.here(roomCount)} · {t.inGallery(total)}</span>
           </span>
           <button type="button" className="btn btn-glass live-chat-btn" onClick={() => setChatOpen(!chatOpen)} aria-expanded={chatOpen} aria-keyshortcuts="T">
             {t.chat}
-            {unread > 0 && <span className="live-badge" aria-label={t.unread(unread)}>{unread > 9 ? "9+" : unread}</span>}
           </button>
           {(status === "busy" || status === "offline") && <span className="live-status" role="status">{t.status[status]}</span>}
-        </div>
-      )}
-      {toast && hud && !(chatOpen && viewing === toast.conv) && (
-        <div className="live-toast" role="status">
-          <span>{t.newMessageFrom(toast.name)}</span>
-          <button type="button" className="btn btn-small btn-primary" onClick={() => { setAsk({ tab: "messages", with: toast.with, nonce: Date.now() }); setChatOpen(true); setToast(null); }}>{t.open}</button>
-          <button type="button" className="card-close" onClick={() => setToast(null)} aria-label={t.dismiss}>×</button>
         </div>
       )}
       {chatOpen && me && (
@@ -306,11 +254,6 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
           locale={locale}
           roomId={roomId}
           roomTitle={roomTitle}
-          content={content}
-          conversations={convs ?? []}
-          blocks={blocks ?? []}
-          request={ask}
-          onViewing={setViewing}
           onClose={() => setChatOpen(false)}
         />
       )}
@@ -318,15 +261,3 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
   );
 }
 
-export type ConversationSummary = {
-  id: Id<"conversations">;
-  with: Id<"visitors">;
-  name: string;
-  color: string;
-  online: boolean;
-  roomId: string | null;
-  lastAt: number;
-  lastBody: string;
-  lastFromMe: boolean;
-  unread: number;
-};

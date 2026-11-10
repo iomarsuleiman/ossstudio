@@ -15,6 +15,7 @@ import { createWorldStore, loadVisit, saveVisit, type WorldStore } from "@/lib/w
 import { dominantColor } from "@/lib/painter";
 import { ExhibitView } from "./ExhibitView";
 import { MapDialog } from "./MapDialog";
+import { MuseumMenu } from "./MuseumMenu";
 import { Joystick } from "./Joystick";
 import { ATMOSPHERE } from "./world/atmosphere";
 import { CollectButton } from "./CollectButton";
@@ -23,7 +24,7 @@ import { GiftShop } from "./GiftShop";
 import { collection, useCollection } from "@/lib/collection";
 import { NetStore } from "@/lib/multiplayer/net";
 import { ownerKey } from "@/lib/multiplayer/local";
-import { MultiplayerLayer, multiplayerEnabled, type ChatRequest } from "./multiplayer/MultiplayerLayer";
+import { MultiplayerLayer, multiplayerEnabled } from "./multiplayer/MultiplayerLayer";
 import { PerfOverlay } from "./multiplayer/PerfOverlay";
 
 const World = dynamic(() => import("./world/World"), { ssr: false });
@@ -104,13 +105,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   if (!netRef.current) netRef.current = new NetStore();
   const net = netRef.current;
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatRequest, setChatRequest] = useState<ChatRequest | null>(null);
-  const onChatWith = useCallback((visitorId: string) => {
-    if (document.pointerLockElement) document.exitPointerLock();
-    setChatRequest({ tab: "messages", with: visitorId, nonce: Date.now() });
-    setChatOpen(true);
-  }, []);
-
+  const [menuOpen, setMenuOpen] = useState(false);
   const [entered, setEntered] = useState(start.entered);
   const [roomId, setRoomId] = useState<RoomId>(start.roomId);
   const [openSlug, setOpenSlug] = useState<string | null>(start.exhibit ? start.exhibit.slug : null);
@@ -448,7 +443,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (openSlug) { if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); closeExhibit(); } return; }
-      if (mapOpen || shelfOpen || checkout || !entered) return;
+      if (menuOpen || mapOpen || shelfOpen || checkout || !entered) return;
       // W A S D only; the arrow keys are left alone (for scrolling and screen readers).
       const move = ["KeyW", "KeyA", "KeyS", "KeyD"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
@@ -477,17 +472,17 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
-  }, [store, openSlug, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook, net]);
+  }, [store, openSlug, menuOpen, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook, net]);
 
   useEffect(() => {
-    const paused = mapOpen || shelfOpen || !!checkout;
+    const paused = menuOpen || mapOpen || shelfOpen || !!checkout;
     if (paused) {
       store.keys.clear(); store.joy = { x: 0, y: 0 };
       if (store.mode === "walk") store.mode = "transition";
       if (document.pointerLockElement) document.exitPointerLock();
     }
     else if (store.mode === "transition" && wash.phase === "idle" && !veil && entered && !openSlug) store.mode = "walk";
-  }, [mapOpen, shelfOpen, checkout, store, wash.phase, veil, entered, openSlug]);
+  }, [menuOpen, mapOpen, shelfOpen, checkout, store, wash.phase, veil, entered, openSlug]);
 
   // --- keyboard focus ----------------------------------------------------------------
   // The world takes focus as soon as you're in, and gets it back whenever an
@@ -627,7 +622,6 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             roomId={roomId}
             store={store}
             net={net}
-            onChatWith={onChatWith}
             onReady={() => setReady(true)}
             onExhibitClick={onExhibitClick}
             onFloorClick={onFloorClick}
@@ -653,36 +647,16 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <span className="hud-room-name">{room.t[locale].title}</span>
           </div>
           <nav className="hud-actions" aria-label={ui.siteTitle}>
-            <button type="button" className="btn btn-glass" onClick={() => setMapOpen(true)} aria-keyshortcuts="M">
-              {ui.map}
+            <button
+              id="museum-menu-trigger" type="button" className="btn btn-glass museum-menu-trigger"
+              aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? "museum-menu" : undefined}
+              onClick={() => { setChatOpen(false); setSelected(null); setMenuOpen(true); }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              {ui.menu}
             </button>
-            <button type="button" className="btn btn-glass hud-collection" onClick={() => setShelfOpen(true)}>
-              <span aria-hidden="true">✦</span> {ui.collectionButton(collected.length)}
-            </button>
-            <button type="button" className="btn btn-glass" onClick={toggleSound} aria-pressed={sound}>
-              {sound ? ui.soundOn : ui.soundOff}
-            </button>
-            {sound && (
-              <label className="volume">
-                <span className="sr-only">{ui.volume}</span>
-                <input type="range" min={0} max={1} step={0.05} value={volume}
-                  onChange={(e) => { const v = Number(e.target.value); setVolume(v); audio.setVolume(v); }} />
-              </label>
-            )}
-            <button type="button" className="btn btn-glass" onClick={switchLanguage} aria-label={ui.languageLabel} lang={locale === "en" ? "ar" : "en"}>
-              {ui.language}
-            </button>
-            {(
-              <button type="button" className="btn btn-glass" onClick={toggleView} aria-pressed={view === "third"} aria-keyshortcuts="V">
-                {view === "third" ? ui.viewFirst : ui.viewSide}
-              </button>
-            )}
-            {!touch && (
-              <button type="button" className="btn btn-glass" onClick={toggleMouseLook} aria-pressed={mouseLook} aria-keyshortcuts="L">
-                {ui.mouseLook}
-              </button>
-            )}
-            <Link className="btn btn-glass" href={`/${locale}/list`}>{ui.index}</Link>
           </nav>
         </header>
       )}
@@ -717,7 +691,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         </div>
       )}
 
-      {showHud && touch && !mapOpen && <Joystick store={store} label={ui.joystick} />}
+      {showHud && touch && !mapOpen && !chatOpen && !menuOpen && <Joystick store={store} label={ui.joystick} />}
       {showHud && mouseLook && <div className="crosshair" aria-hidden="true" />}
       {showHud && mouseLook && hint && <p className="mouse-look-hint" role="note">{ui.mouseLookHint}</p>}
       {showHud && seated && <p className="seated-hint" role="status">{touch ? ui.seatedTouch : ui.seatedDesktop}</p>}
@@ -784,15 +758,25 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         locale={locale}
         roomId={roomId}
         entered={entered}
-        hud={showHud && !mapOpen && !shelfOpen && !checkout}
-        chatOpen={chatOpen && showHud}
+        hud={showHud && !menuOpen && !mapOpen && !shelfOpen && !checkout}
+        chatOpen={chatOpen && showHud && !menuOpen && !mapOpen && !shelfOpen && !checkout}
         setChatOpen={setChatOpen}
-        request={chatRequest}
-        onNotify={() => audio.chime()}
         entryRequested={entryRequested}
         onAdmitted={finishEntering}
         onEntryCancelled={() => { setEntryRequested(false); if (!audio.muted) { audio.disable(); setSound(false); } }}
       />
+
+      {menuOpen && showHud && (
+        <MuseumMenu
+          locale={locale} count={collected.length} sound={sound} volume={volume}
+          view={view} touch={touch} mouseLook={mouseLook}
+          onClose={() => setMenuOpen(false)}
+          onMap={() => setMapOpen(true)} onCollection={() => setShelfOpen(true)}
+          onSound={toggleSound}
+          onVolume={(v) => { setVolume(v); audio.setVolume(v); }}
+          onLanguage={switchLanguage} onView={toggleView} onMouseLook={toggleMouseLook}
+        />
+      )}
 
       {shelfOpen && (
         <CollectionShelf

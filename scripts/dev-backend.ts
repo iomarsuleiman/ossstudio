@@ -17,7 +17,6 @@ const modules: Record<string, () => Promise<unknown>> = {
   "/convex/_generated/server.js": () => import("../convex/_generated/server.js"),
   "/convex/presence.ts": () => import("../convex/presence"),
   "/convex/chat.ts": () => import("../convex/chat"),
-  "/convex/dms.ts": () => import("../convex/dms"),
   "/convex/visitorAuth.ts": () => import("../convex/visitorAuth"),
   "/convex/crons.ts": () => import("../convex/crons"),
   "/convex/queue.ts": () => import("../convex/queue"),
@@ -43,7 +42,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.url === "/version") { res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ version: version() })); return; }
     const { name, args } = await body(req);
-    if (typeof name !== "string" || !/^(presence|chat|dms|queue):[a-zA-Z]+$/.test(name)) throw new Error("Unknown function");
+    if (typeof name !== "string" || !/^(presence|chat|queue):[a-zA-Z]+$/.test(name)) throw new Error("Unknown function");
     let value: unknown;
     if (req.url === "/query") value = await t.query(makeFunctionReference<"query">(name), args ?? {});
     else if (req.url === "/mutation") value = await t.mutation(makeFunctionReference<"mutation">(name), args ?? {});

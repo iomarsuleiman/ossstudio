@@ -64,7 +64,10 @@ export function benchCollider(b: RoomShape["benches"][number]): Collider {
 /** Everything you can't walk through in a room. */
 export function roomColliders(content: GalleryContent, room: Room): Collider[] {
   const shape = content.shapes.find((s) => s.roomId === room.id)!;
-  const list: Collider[] = shape.benches.map(benchCollider);
+  const list: Collider[] = [
+    ...shape.benches.map(benchCollider),
+    ...(shape.partitions ?? []),
+  ];
   if (room.id === "main") list.push({ x: 0, z: 0, r: 1.75 });
   else list.push({ x: -shape.width / 2 + 2.0, z: shape.length / 2 - INTRO_PANEL_INSET, r: 1.1 });
   for (const e of content.exhibits) {

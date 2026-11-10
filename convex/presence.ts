@@ -169,19 +169,14 @@ async function removePresence(ctx: MutationCtx, visitor: Doc<"visitors">) {
 }
 
 export const setProfile = mutation({
-  args: { token: v.string(), name: v.optional(v.string()), allowDMs: v.optional(v.boolean()) },
-  handler: async (ctx, { token, name, allowDMs }) => {
+  args: { token: v.string(), name: v.string() },
+  handler: async (ctx, { token, name }) => {
     const { visitor, p } = await myPresence(ctx, token);
-    const patch: Partial<Doc<"visitors">> = {};
-    if (name !== undefined) {
-      const clean = cleanName(name);
-      if (clean.length < 2) throw new Error("Name too short");
-      patch.name = clean;
-    }
-    if (allowDMs !== undefined) patch.allowDMs = allowDMs;
-    await ctx.db.patch(visitor._id, patch);
-    if (p && (patch.name || patch.allowDMs !== undefined)) await ctx.db.patch(p._id, { name: patch.name ?? p.name, open: patch.allowDMs ?? p.open, updatedAt: Date.now() });
-    return { name: patch.name ?? visitor.name, allowDMs: patch.allowDMs ?? visitor.allowDMs };
+    const clean = cleanName(name);
+    if (clean.length < 2) throw new Error("Name too short");
+    await ctx.db.patch(visitor._id, { name: clean });
+    if (p) await ctx.db.patch(p._id, { name: clean, updatedAt: Date.now() });
+    return { name: clean };
   },
 });
 

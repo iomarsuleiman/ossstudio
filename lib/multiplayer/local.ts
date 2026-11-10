@@ -1,6 +1,4 @@
-// Things multiplayer keeps in this browser only: your anonymous identity
-// token (so your private conversations are still yours next visit) and the
-// people you've muted (muting is private and never sent to the server).
+// Anonymous visitor identity and locally muted names for room and gallery chat.
 import { useSyncExternalStore } from "react";
 
 const TOKEN_KEY = "osg:mp:token";

@@ -114,6 +114,50 @@ button { font: inherit; color: inherit; }
 .hud-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 .volume input { width: 90px; accent-color: var(--burgundy); height: 44px; }
 
+/* One quiet entry point for museum navigation and preferences. */
+.museum-menu-trigger { min-height: 48px; }
+.museum-menu {
+  position: fixed; inset: 88px 16px auto auto; margin: 0;
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 104px);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 20px; border: 1px solid var(--line); border-radius: 22px;
+  background: var(--cream); color: var(--ink); font: inherit;
+  box-shadow: 0 20px 70px rgba(47, 42, 42, 0.2);
+  animation: rise 180ms var(--ease) both;
+}
+[dir="rtl"] .museum-menu { inset: 88px auto auto 16px; }
+.museum-menu::backdrop { background: rgba(47, 42, 42, 0.22); }
+.museum-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.museum-menu-head h2 { margin: 0; font: 600 1.7rem/1.2 var(--font-head); }
+.menu-close { justify-content: center; width: 44px; padding: 0; font-size: 1.5rem; }
+.museum-menu-section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
+.museum-menu-section h3 { margin: 0 8px 8px; color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+.museum-menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; min-height: 48px; padding: 10px 12px;
+  border: 0; border-radius: 10px; background: transparent;
+  font: inherit; text-align: start; text-decoration: none; cursor: pointer;
+}
+.museum-menu-row:hover { background: var(--paper); }
+.menu-value { color: var(--wine); font-size: 0.85rem; text-align: end; }
+.menu-count { min-width: 28px; padding: 0 8px; border-radius: 999px; background: var(--paper-deep); text-align: center; font-size: 0.85rem; }
+.menu-key { color: var(--muted); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; }
+.museum-menu-volume { display: flex; align-items: center; gap: 20px; padding: 0 12px 8px; font-size: 0.85rem; color: var(--muted); }
+.museum-menu-volume input { flex: 1; min-width: 0; height: 44px; accent-color: var(--burgundy); }
+.museum-menu-help { border-top: 1px solid var(--line); margin-top: 12px; padding: 12px 8px 0; }
+.museum-menu-help summary { min-height: 44px; align-content: center; cursor: pointer; font-size: 0.85rem; }
+.museum-menu-help p { margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); }
+@media (pointer: coarse) { .menu-key { display: none; } }
+@media (max-width: 640px) {
+  .museum-menu, [dir="rtl"] .museum-menu {
+    inset: auto 0 0; width: 100%; max-height: calc(100dvh - 24px);
+    border-radius: 24px 24px 0 0; padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  }
+  .museum-menu-trigger { min-height: 44px; }
+  .hud-room { min-width: 0; max-width: calc(100% - 120px); }
+  .hud-room-name { overflow-wrap: anywhere; }
+}
+
 .hud-bottom {
   position: absolute; z-index: 10; bottom: 0; inset-inline: 0;
   display: flex; flex-direction: column; align-items: center; gap: var(--s3);
@@ -314,12 +358,11 @@ button { font: inherit; color: inherit; }
   .map-canvas { max-width: 380px; }
 }
 @media (max-width: 640px) {
-  .hud-top { flex-direction: column; align-items: stretch; padding: var(--s3); }
+  .hud-top { padding: var(--s3); }
   .hud-actions { justify-content: flex-start; }
   .hud-site { display: none; }
   .hud-room-name { font-size: 1.1rem; }
   .btn-glass { min-height: 40px; padding: 0 var(--s3); font-size: 0.85rem; }
-  .volume { display: none; }
   .arrival-card { padding: var(--s6) var(--s4) var(--s5); }
   .nearby-card { padding: var(--s3) var(--s4); }
   .nearby-title { font-size: 1.25rem; }
@@ -583,7 +626,7 @@ button { font: inherit; color: inherit; }
 }
 .kbd-dark { background: rgba(61, 55, 55, 0.08); border-color: var(--line); }
 
-/* --- Live: presence, chat, private messages ---------------------------------------- */
+/* --- Live visitor presence and public chat ---------------------------------------- */
 .live-hud {
   position: absolute; z-index: 12; bottom: calc(var(--s4) + env(safe-area-inset-bottom)); right: calc(var(--s4) + env(safe-area-inset-right));
   display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); pointer-events: none;
@@ -617,8 +660,8 @@ button { font: inherit; color: inherit; }
 .live-toast .card-close { position: static; }
 /* Keep the centre of the bottom edge clear for the artwork card and hints. */
 @media (min-width: 641px) and (pointer: fine) { .hud-bottom { padding-inline: 220px; } }
-/* Phones: joystick bottom-left, cards bottom-centre, so live controls sit mid-right. */
-@media (pointer: coarse) { .live-hud { bottom: auto; top: 46%; } }
+/* On touch devices, the chat launcher stays above the movement controls. */
+@media (pointer: coarse) { .live-hud { bottom: auto; top: calc(132px + env(safe-area-inset-top)); } }
 
 .chat-panel {
   position: absolute; z-index: 24; top: var(--s4); bottom: var(--s4); right: var(--s4);
@@ -627,8 +670,47 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 24px 70px rgba(40, 20, 24, 0.25); animation: rise 280ms var(--ease) both;
 }
 [dir="rtl"] .chat-panel { right: auto; left: var(--s4); }
-@media (max-width: 640px) {
-  .chat-panel, [dir="rtl"] .chat-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: min(72dvh, 560px); }
+/* A bottom sheet keeps public chat separate from touch navigation. */
+.chat-scrim { display: none; }
+@media (max-width: 760px) {
+  .live-hud {
+    position: fixed; top: calc(130px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right)); bottom: auto;
+    align-items: flex-end; gap: 6px;
+  }
+  [dir="rtl"] .live-hud {
+    right: auto; left: calc(12px + env(safe-area-inset-left));
+    align-items: flex-start;
+  }
+  .live-hud.is-chat-open { visibility: hidden; pointer-events: none; }
+  .live-presence { font-size: 0.75rem; padding: 4px 9px; }
+  .live-chat-btn { min-height: 44px; padding-inline: 18px; }
+  .chat-scrim {
+    display: block; position: fixed; inset: 0; z-index: 23;
+    padding: 0; border: 0; border-radius: 0;
+    background: rgba(30, 22, 26, 0.38);
+  }
+  .chat-panel, [dir="rtl"] .chat-panel {
+    position: fixed; top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; height: min(68dvh, 580px);
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top));
+    border: 0; border-top: 1px solid var(--line);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -12px 50px rgba(40, 20, 24, 0.2);
+    animation: rise 220ms var(--ease) both;
+  }
+  .chat-head { padding: 10px 12px 0 14px; }
+  .chat-head .card-close { width: 44px; height: 44px; }
+  .chat-tabs { overflow-x: visible; min-width: 0; justify-content: space-between; }
+  .chat-tabs button { min-height: 44px; padding: 9px 6px 10px; font-size: 0.83rem; }
+  .chat-list { min-height: 0; padding: 12px 16px; touch-action: pan-y; }
+  .chat-compose { flex: none; padding: 9px 12px max(12px, env(safe-area-inset-bottom)); }
+  .chat-compose textarea { min-width: 0; font-size: 16px; }
+  .chat-compose button { min-height: 44px; }
+}
+@media (max-width: 760px) and (max-height: 440px) {
+  .chat-panel, [dir="rtl"] .chat-panel { height: min(88dvh, 380px); }
+  .live-hud { top: 92px; }
 }
 .chat-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s2) 0 var(--s3); border-bottom: 1px solid var(--line); }
 .chat-head .card-close { position: static; flex: none; }
@@ -638,7 +720,7 @@ button { font: inherit; color: inherit; }
   border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center;
 }
 .chat-tabs button.is-on { color: var(--wine); border-bottom-color: var(--burgundy); }
-.chat-list { flex: 1; overflow-y: auto; padding: var(--s3) var(--s4); overscroll-behavior: contain; }
+.chat-list { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s3) var(--s4); overscroll-behavior: contain; }
 .chat-list ol { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
 .chat-intro { margin: 0 0 var(--s3); font-size: 0.82rem; color: var(--muted); text-align: center; }
 .chat-empty { text-align: center; color: var(--muted); margin: var(--s5) 0; }
@@ -661,24 +743,6 @@ button { font: inherit; color: inherit; }
 .chat-note { margin: var(--s2) var(--s4) var(--s3); font-size: 0.85rem; color: var(--muted); text-align: center; }
 .chat-subhead { margin: var(--s3) 0 var(--s2); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 [dir="rtl"] .chat-subhead { letter-spacing: 0; text-transform: none; font-size: 0.9rem; }
-.conv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.conv-row { display: flex; align-items: center; gap: var(--s3); width: 100%; padding: var(--s2); border: 0; border-radius: 12px; background: transparent; cursor: pointer; text-align: start; }
-.conv-row:hover { background: rgba(61, 55, 55, 0.06); }
-.conv-avatar { position: relative; width: 36px; height: 36px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.35); }
-.presence-dot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #b9b2ad; border: 2px solid var(--paper); }
-.presence-dot.is-online { background: #6b9a5a; }
-.conv-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.conv-name { font-weight: 700; }
-.conv-status { font-size: 0.75rem; color: var(--muted); }
-.conv-last { font-size: 0.85rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.thread-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.thread-who { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; flex: 1; }
-.thread-who small { color: var(--muted); font-size: 0.75rem; }
-.thread-actions { display: flex; gap: 4px; }
-.dm-msg { max-width: 82%; justify-self: start; padding: 8px 12px; border-radius: 16px; background: var(--cream); border: 1px solid var(--line); }
-.dm-msg.is-mine { justify-self: end; background: color-mix(in srgb, var(--burgundy) 14%, var(--cream)); }
-.dm-msg time { display: block; font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
-.dm-seen { text-align: end; margin: 4px 0 0; font-size: 0.72rem; color: var(--muted); }
 .chat-settings .field { display: grid; gap: 6px; font-weight: 600; margin-bottom: var(--s4); }
 .toggle { display: flex; gap: var(--s3); align-items: flex-start; margin-bottom: var(--s4); cursor: pointer; }
 .toggle input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--burgundy); flex: none; }

@@ -37,19 +37,14 @@ export const list = query({
 });
 
 /**
- * Typing indicator for a chat channel or a private conversation ("dm:<id>").
+ * Typing indicator for a room or gallery chat channel.
  * Clients call it at most every few seconds while typing; it expires on its own.
  */
 export const setTyping = mutation({
   args: { token: v.string(), channel: v.string(), typing: v.boolean() },
   handler: async (ctx, { token, channel, typing }) => {
-    if (!isChannel(channel) && !/^dm:[a-z0-9]+$/i.test(channel)) throw new Error("Unknown channel");
+    if (!isChannel(channel)) throw new Error("Unknown channel");
     const visitor = await requireVisitor(ctx, token);
-    if (channel.startsWith("dm:")) {
-      const conv = await ctx.db.normalizeId("conversations", channel.slice(3));
-      const c = conv && (await ctx.db.get(conv));
-      if (!c || (c.a !== visitor._id && c.b !== visitor._id)) throw new Error("Not your conversation");
-    }
     const mine = (await ctx.db.query("typing").withIndex("by_visitor", (q) => q.eq("visitorId", visitor._id)).collect()).find((t) => t.channel === channel);
     if (!typing) { if (mine) await ctx.db.delete(mine._id); return; }
     const expiresAt = Date.now() + 6000;
@@ -61,6 +56,7 @@ export const setTyping = mutation({
 export const whoIsTyping = query({
   args: { channel: v.string() },
   handler: async (ctx, { channel }) => {
+    if (!isChannel(channel)) return [];
     const rows = await ctx.db.query("typing").withIndex("by_channel", (q) => q.eq("channel", channel)).take(20);
     // Clients also hide entries whose expiresAt has passed on their own clock.
     return rows.map((t) => ({ id: t.visitorId, name: t.name, until: t.expiresAt }));

@@ -69,16 +69,20 @@ export interface RoomShape {
   width: number;
   length: number;
   benches: BenchPlacement[];
+  /** Freestanding gallery walls. Visitors walk around their open ends. */
+  partitions?: { x: number; z: number; hx: number; hz: number }[];
   /** Signed sub-sections within a hall (e.g. Linux Distributions), placed at z. */
   sections?: { id: "linux" | "inventions"; z: number }[];
 }
 
-const FRAME_SPACING = 3.6;
-const ROOM_WIDTH = 9;
-const SPAWN_DIST = 2.4;
-const MAIN_W = 16;
-const MAIN_L = 24;
-const MAIN_DOOR_Z = [-7.5, -2.5, 2.5, 7.5];
+// Framed pieces need space for the visitor to stop and read without blocking
+// the next piece. Width also leaves a generous path around benches and walls.
+export const FRAME_SPACING = 7.2;
+const ROOM_WIDTH = 14;
+const SPAWN_DIST = 3;
+const MAIN_W = 22;
+const MAIN_L = 34;
+const MAIN_DOOR_Z = [-11.5, -4, 4, 11.5];
 
 /** Shared with rendering and navigation so benches reserve the entrance sign's bay. */
 export const INTRO_PANEL_INSET = 2.5;
@@ -92,9 +96,9 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
 
   // --- Main Hall -----------------------------------------------------------
   // Each pair of highlights has back-to-back seating, clear of the map and portals.
-  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [-3.6, 3.6].flatMap((x) => [{ x, z: -6.72, rotY: Math.PI }, { x, z: -6.08, rotY: 0 }]) });
+  shapes.push({ roomId: "main", width: MAIN_W, length: MAIN_L, benches: [-5.2, 5.2].flatMap((x) => [{ x, z: -11.4, rotY: Math.PI }, { x, z: -10.65, rotY: 0 }]) });
   MAIN_HALL_HIGHLIGHTS.forEach((slug, i) => {
-    const x = -5.4 + i * 3.6;
+    const x = -8.1 + i * 5.4;
     const z = -MAIN_L / 2 + 0.12;
     exhibits.push({
       id: `main:${slug}`, slug, roomId: "main", kind: "highlight",
@@ -127,11 +131,12 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
       });
     // Each signed section starts on a fresh pair and leaves one empty pair for its sign.
     const pairs = Math.ceil(rest.length / 2) + (distros.length ? Math.ceil(distros.length / 2) + 1 : 0) + (alcove.length ? 2 : 0);
-    const length = Math.max(18, pairs * FRAME_SPACING + 9);
+    const length = Math.max(26, pairs * FRAME_SPACING + 16);
     const half = length / 2;
     const benches: BenchPlacement[] = [];
     const sections: NonNullable<RoomShape["sections"]> = [];
-    const shape: RoomShape = { roomId: room.id, width: ROOM_WIDTH, length, benches, sections };
+    const partitions: NonNullable<RoomShape["partitions"]> = [];
+    const shape: RoomShape = { roomId: room.id, width: ROOM_WIDTH, length, benches, partitions, sections };
     shapes.push(shape);
 
     const place = (p: ProjectLike, idx: number, kind: ExhibitPlacement["kind"]) => {
@@ -152,7 +157,7 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
         id: `${room.id}:${p.slug}`, slug: p.slug, roomId: room.id, kind,
         x, y: opening ? 2.0 : 1.9, z,
         rotY: left ? Math.PI / 2 : -Math.PI / 2,
-        w: opening ? 2.0 : 1.5, h: opening ? 1.5 : 1.12,
+        w: opening ? 2.3 : 1.9, h: opening ? 1.65 : 1.35,
         spawn: { x: left ? x + SPAWN_DIST : x - SPAWN_DIST, z, yaw: left ? -Math.PI / 2 : Math.PI / 2 },
       });
     };
@@ -170,14 +175,30 @@ export function layoutGallery(rooms: RoomLike[], projects: ProjectLike[]) {
       base += 2;
       alcove.forEach((p, i) => place(p, base + i, "pedestal"));
     }
-    // Every pair of facing artworks gets two outward-facing benches with
-    // their backs together. Side aisles stay open for walking and sculptures.
-    const bays = new Set(exhibits.filter((e) => e.roomId === room.id).map((e) => e.z));
-    for (const z of bays) {
-      benches.push(
-        { x: -0.32, z, rotY: -Math.PI / 2 },
-        { x: 0.32, z, rotY: Math.PI / 2 },
-      );
+    // Give each artwork its own bay. Seating is deliberately sparse, in the
+    // open space between selected bays, rather than at every painting.
+    const bays = [...new Set(exhibits.filter((e) => e.roomId === room.id).map((e) => e.z))]
+      .sort((a, b) => b - a);
+    for (let i = 1; i < bays.length - 1; i += 3) {
+      const left = Math.floor(i / 3) % 2 === 0;
+      benches.push({
+        x: left ? -2.2 : 2.2,
+        z: (bays[i] + bays[i + 1]) / 2,
+        rotY: left ? -Math.PI / 2 : Math.PI / 2,
+      });
+    }
+
+    // Offset internal gallery walls interrupt the long straight sightline.
+    // Each one keeps an aisle at least 5 m wide at its open end. The
+    // successive openings alternate, creating wide, navigable turns.
+    for (let i = 3; i < bays.length - 1; i += 4) {
+      const openOnRight = Math.floor(i / 4) % 2 === 0;
+      partitions.push({
+        x: openOnRight ? -2.65 : 2.65,
+        z: (bays[i - 1] + bays[i]) / 2,
+        hx: 4.3,
+        hz: 0.2,
+      });
     }
 
     // Entrance (back to the Main Hall) and onward door to the next gallery.

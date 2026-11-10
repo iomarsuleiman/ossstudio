@@ -63,7 +63,7 @@ export function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export const CONTENT_REVISION = "2026-11-09.3";
+export const CONTENT_REVISION = "2026-11-10.1";
 
 /** Every catalogued project, including those not currently on display. */
 export function allProjects(): Project[] {

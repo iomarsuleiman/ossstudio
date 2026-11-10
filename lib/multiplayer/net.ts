@@ -17,7 +17,6 @@ export interface RemoteRow {
   m: boolean; // moving
   s: string | null; // seat "bench:seat"
   t: number; // server time of this update
-  o: boolean; // accepts new private messages
 }
 
 interface Snap { t: number; x: number; z: number; yaw: number }
@@ -27,7 +26,6 @@ export interface Remote {
   name: string;
   color: string;
   seat: string | null;
-  open: boolean;
   snaps: Snap[];
   /** Drawn pose (updated by `sample`). */
   x: number;
@@ -45,12 +43,10 @@ const MAX_SNAPS = 12;
 export class NetStore {
   remotes = new Map<string, Remote>();
   /** Me, once joined. */
-  me: { id: string; name: string; color: string; allowDMs: boolean } | null = null;
+  me: { id: string; name: string; color: string } | null = null;
   status: NetStatus = "off";
   /** Live head counts: whole gallery and per room. */
   counts: { total: number; rooms: Record<string, number> } | null = null;
-  /** Visitors whose chat icon should not show (blocked by me). */
-  hidden = new Set<string>();
   /** Estimated (local clock - server clock) from the fastest recent update. */
   private offset: number | null = null;
   /** How far in the past remote visitors are drawn, ms (follows the frame cadence). */
@@ -69,7 +65,6 @@ export class NetStore {
   setStatus(s: NetStatus) { if (s !== this.status) { this.status = s; this.bump(); } }
   setMe(me: NetStore["me"]) { this.me = me; this.bump(); }
   setCounts(c: NetStore["counts"]) { this.counts = c; this.bump(); }
-  setHidden(ids: Iterable<string>) { this.hidden = new Set(ids); this.bump(); }
 
   /** A new room snapshot from the server (all visitors in my room). */
   ingest(rows: RemoteRow[], sizeBytes: number) {
@@ -89,12 +84,12 @@ export class NetStore {
       if (this.offset === null || gap < this.offset) this.offset = gap;
       let r = this.remotes.get(row.id);
       if (!r) {
-        r = { id: row.id, name: row.n, color: row.c, seat: row.s, open: row.o, snaps: [], x: row.x, z: row.z, yaw: row.y, speed: 0, walkPhase: 0, sit: row.s ? 1 : 0 };
+        r = { id: row.id, name: row.n, color: row.c, seat: row.s, snaps: [], x: row.x, z: row.z, yaw: row.y, speed: 0, walkPhase: 0, sit: row.s ? 1 : 0 };
         this.remotes.set(row.id, r);
         membershipChanged = true;
       }
-      if (r.name !== row.n || r.color !== row.c || r.open !== row.o) membershipChanged = true;
-      r.name = row.n; r.color = row.c; r.seat = row.s; r.open = row.o;
+      if (r.name !== row.n || r.color !== row.c) membershipChanged = true;
+      r.name = row.n; r.color = row.c; r.seat = row.s;
       const last = r.snaps[r.snaps.length - 1];
       if (!last || row.t > last.t) {
         r.snaps.push({ t: row.t, x: row.x, z: row.z, yaw: row.y });
