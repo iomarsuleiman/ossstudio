@@ -114,6 +114,50 @@ button { font: inherit; color: inherit; }
 .hud-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 .volume input { width: 90px; accent-color: var(--burgundy); height: 44px; }
 
+/* One quiet entry point for museum navigation and preferences. */
+.museum-menu-trigger { min-height: 48px; }
+.museum-menu {
+  position: fixed; inset: 88px 16px auto auto; margin: 0;
+  width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 104px);
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 20px; border: 1px solid var(--line); border-radius: 22px;
+  background: var(--cream); color: var(--ink); font: inherit;
+  box-shadow: 0 20px 70px rgba(47, 42, 42, 0.2);
+  animation: rise 180ms var(--ease) both;
+}
+[dir="rtl"] .museum-menu { inset: 88px auto auto 16px; }
+.museum-menu::backdrop { background: rgba(47, 42, 42, 0.22); }
+.museum-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.museum-menu-head h2 { margin: 0; font: 600 1.7rem/1.2 var(--font-head); }
+.menu-close { justify-content: center; width: 44px; padding: 0; font-size: 1.5rem; }
+.museum-menu-section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
+.museum-menu-section h3 { margin: 0 8px 8px; color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+.museum-menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; min-height: 48px; padding: 10px 12px;
+  border: 0; border-radius: 10px; background: transparent;
+  font: inherit; text-align: start; text-decoration: none; cursor: pointer;
+}
+.museum-menu-row:hover { background: var(--paper); }
+.menu-value { color: var(--wine); font-size: 0.85rem; text-align: end; }
+.menu-count { min-width: 28px; padding: 0 8px; border-radius: 999px; background: var(--paper-deep); text-align: center; font-size: 0.85rem; }
+.menu-key { color: var(--muted); font-size: 0.75rem; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; }
+.museum-menu-volume { display: flex; align-items: center; gap: 20px; padding: 0 12px 8px; font-size: 0.85rem; color: var(--muted); }
+.museum-menu-volume input { flex: 1; min-width: 0; height: 44px; accent-color: var(--burgundy); }
+.museum-menu-help { border-top: 1px solid var(--line); margin-top: 12px; padding: 12px 8px 0; }
+.museum-menu-help summary { min-height: 44px; align-content: center; cursor: pointer; font-size: 0.85rem; }
+.museum-menu-help p { margin: 0 0 8px; font-size: 0.85rem; color: var(--muted); }
+@media (pointer: coarse) { .menu-key { display: none; } }
+@media (max-width: 640px) {
+  .museum-menu, [dir="rtl"] .museum-menu {
+    inset: auto 0 0; width: 100%; max-height: calc(100dvh - 24px);
+    border-radius: 24px 24px 0 0; padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+  }
+  .museum-menu-trigger { min-height: 44px; }
+  .hud-room { min-width: 0; max-width: calc(100% - 120px); }
+  .hud-room-name { overflow-wrap: anywhere; }
+}
+
 .hud-bottom {
   position: absolute; z-index: 10; bottom: 0; inset-inline: 0;
   display: flex; flex-direction: column; align-items: center; gap: var(--s3);
@@ -314,12 +358,11 @@ button { font: inherit; color: inherit; }
   .map-canvas { max-width: 380px; }
 }
 @media (max-width: 640px) {
-  .hud-top { flex-direction: column; align-items: stretch; padding: var(--s3); }
+  .hud-top { padding: var(--s3); }
   .hud-actions { justify-content: flex-start; }
   .hud-site { display: none; }
   .hud-room-name { font-size: 1.1rem; }
   .btn-glass { min-height: 40px; padding: 0 var(--s3); font-size: 0.85rem; }
-  .volume { display: none; }
   .arrival-card { padding: var(--s6) var(--s4) var(--s5); }
   .nearby-card { padding: var(--s3) var(--s4); }
   .nearby-title { font-size: 1.25rem; }
