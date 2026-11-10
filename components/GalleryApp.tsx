@@ -106,6 +106,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const net = netRef.current;
   const [chatOpen, setChatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hudTarget, setHudTarget] = useState<HTMLDivElement | null>(null);
   const [entered, setEntered] = useState(start.entered);
   const [roomId, setRoomId] = useState<RoomId>(start.roomId);
   const [openSlug, setOpenSlug] = useState<string | null>(start.exhibit ? start.exhibit.slug : null);
@@ -113,7 +114,12 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
   const [mapOpen, setMapOpen] = useState(false);
   // The artwork whose details you asked for by clicking it (nothing opens by just walking up).
   const [selected, setSelected] = useState<ExhibitPlacement | null>(null);
+  useEffect(() => {
+    if ((selected || chatOpen) && document.pointerLockElement) document.exitPointerLock();
+    if (chatOpen) { store.keys.clear(); store.joy = { x: 0, y: 0 }; }
+  }, [selected, chatOpen, store]);
   const [mouseLook, setMouseLook] = useState(false);
+  const mouseLookAvailable = useRef(true);
   const [seated, setSeated] = useState(false);
   const [wash, setWash] = useState<Wash>({ phase: start.exhibit ? "in" : "idle", kind: "ink", color: start.exhibit ? dominantColor(roomFor(content, content.projects.find((p) => p.slug === start.exhibit!.slug)!)) : "#86394a" });
   const [sound, setSound] = useState(false);
@@ -413,8 +419,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     if (!canvas?.requestPointerLock) return;
     try {
       const r = canvas.requestPointerLock() as unknown;
-      if (r instanceof Promise) r.catch(() => {});
-    } catch { /* not allowed here (e.g. in a sandboxed frame) */ }
+      if (r instanceof Promise) r.catch(() => { mouseLookAvailable.current = false; });
+    } catch { mouseLookAvailable.current = false; }
   }, []);
   useEffect(() => {
     const change = () => {
@@ -443,11 +449,16 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     const down = (e: KeyboardEvent) => {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (openSlug) { if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); closeExhibit(); } return; }
-      if (menuOpen || mapOpen || shelfOpen || checkout || !entered) return;
+      if (menuOpen || chatOpen || mapOpen || shelfOpen || checkout || !entered) return;
       // W A S D only; the arrow keys are left alone (for scrolling and screen readers).
       const move = ["KeyW", "KeyA", "KeyS", "KeyD"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
-      if (e.code === "Escape" && selected) { e.preventDefault(); setSelected(null); return; }
+      if (e.code === "Escape") {
+        e.preventDefault();
+        if (selected) setSelected(null);
+        else { setChatOpen(false); setMenuOpen(true); }
+        return;
+      }
       if (e.code === "KeyL") { e.preventDefault(); toggleMouseLook(); return; }
       if (e.code === "KeyT" && net.status !== "off") {
         e.preventDefault();
@@ -472,7 +483,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     window.addEventListener("keyup", up);
     window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); window.removeEventListener("blur", blur); };
-  }, [store, openSlug, menuOpen, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook, net]);
+  }, [store, openSlug, menuOpen, chatOpen, mapOpen, shelfOpen, checkout, entered, closeExhibit, openExhibit, selected, toggleMouseLook, net]);
 
   useEffect(() => {
     const paused = menuOpen || mapOpen || shelfOpen || !!checkout;
@@ -496,8 +507,8 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     });
   }, []);
   useEffect(() => {
-    if (entered && !openSlug && !mapOpen && !shelfOpen && !checkout) focusWorld();
-  }, [entered, openSlug, mapOpen, shelfOpen, checkout, focusWorld]);
+    if (entered && !openSlug && !menuOpen && !chatOpen && !mapOpen && !shelfOpen && !checkout) focusWorld();
+  }, [entered, openSlug, menuOpen, chatOpen, mapOpen, shelfOpen, checkout, focusWorld]);
 
   // --- entering the gallery -----------------------------------------------------------
   // With live features on, entering goes through the waiting line (it lets
@@ -515,6 +526,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, focusWorld, persist]);
   const enterGallery = async (withSound: boolean) => {
+    if (!touch) toggleMouseLook();
     if (withSound) { await audio.enable(); setSound(true); }
     if (multiplayerEnabled()) setEntryRequested(true);
     else finishEntering();
@@ -614,6 +626,11 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         role="application"
         aria-label={`${room.t[locale].title}. ${view === "third" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}`}
         onPointerDown={() => worldEl.current?.focus({ preventScroll: true })}
+        onClickCapture={(e) => {
+          if (touch || mouseLook || !mouseLookAvailable.current || !entered || store.mode !== "walk" || !worldEl.current?.querySelector("canvas")?.requestPointerLock) return;
+          e.stopPropagation();
+          toggleMouseLook();
+        }}
       >
         {webgl ? (
           <World
@@ -647,6 +664,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
             <span className="hud-room-name">{room.t[locale].title}</span>
           </div>
           <nav className="hud-actions" aria-label={ui.siteTitle}>
+            <div className="hud-live-slot" ref={setHudTarget} />
             <button
               id="museum-menu-trigger" type="button" className="btn btn-glass museum-menu-trigger"
               aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? "museum-menu" : undefined}
@@ -685,15 +703,14 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
               </div>
             )}
           </div>
-          {hint && (
-            <p className="controls-hint" role="note">{view === "third" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}</p>
+          {hint && !seated && (
+            <p className="controls-hint" role="note">{mouseLook ? ui.mouseLookHint : view === "third" ? ui.controlsSide : touch ? ui.controlsTouch : ui.controlsDesktop}</p>
           )}
         </div>
       )}
 
       {showHud && touch && !mapOpen && !chatOpen && !menuOpen && <Joystick store={store} label={ui.joystick} />}
       {showHud && mouseLook && <div className="crosshair" aria-hidden="true" />}
-      {showHud && mouseLook && hint && <p className="mouse-look-hint" role="note">{ui.mouseLookHint}</p>}
       {showHud && seated && <p className="seated-hint" role="status">{touch ? ui.seatedTouch : ui.seatedDesktop}</p>}
 
       {veil && (() => {
@@ -758,6 +775,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         locale={locale}
         roomId={roomId}
         entered={entered}
+        hudTarget={hudTarget}
         hud={showHud && !menuOpen && !mapOpen && !shelfOpen && !checkout}
         chatOpen={chatOpen && showHud && !menuOpen && !mapOpen && !shelfOpen && !checkout}
         setChatOpen={setChatOpen}
