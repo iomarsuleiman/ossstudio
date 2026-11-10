@@ -182,6 +182,50 @@ function IntroPanel({ room, locale, shape, a }: { room: Room; locale: Locale; sh
   );
 }
 
+/** Long outer walls and alternating cross walls form readable gallery bays. */
+function GalleryWalls({ shape, a }: { shape: RoomShape; a: Atmosphere }) {
+  const wall = useDisposable(
+    () => paintMaterial({
+      top: mix(a.glow, a.path, 0.7),
+      bottom: mix(a.monument, a.path, 0.35),
+      fog: a.horizon,
+      y0: 0, y1: 4.2,
+      grain: 0.12,
+      rimAmount: 0.25,
+    }),
+    [a],
+  );
+  const panel = useDisposable(
+    () => new THREE.BoxGeometry(1, 3.8, 1),
+    [],
+  );
+  if (shape.roomId === "main") return null;
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          geometry={panel}
+          material={wall}
+          position={[side * (shape.width / 2 + 0.3), 1.9, 0]}
+          scale={[0.5, 1, shape.length - 0.5]}
+          raycast={() => null}
+        />
+      ))}
+      {(shape.partitions ?? []).map((p, i) => (
+        <mesh
+          key={i}
+          geometry={panel}
+          material={wall}
+          position={[p.x, 1.9, p.z]}
+          scale={[p.hx * 2, 1, p.hz * 2]}
+          raycast={() => null}
+        />
+      ))}
+    </group>
+  );
+}
+
 function Bench({ bench, index, a, store }: { bench: BenchPlacement; index: number; a: Atmosphere; store: WorldStore }) {
   const mat = useDisposable(() => paintMaterial({ top: mix(a.monument, a.path, 0.3), bottom: a.monument, fog: a.horizon, y0: 0, y1: 0.9, rimAmount: 0.4, rim: a.glow }), [a]);
   const sit = () => store.sitOn?.(index);
@@ -473,6 +517,7 @@ export function RoomScene({
       <Monuments roomId={room.id} shape={shape} a={a} />
       <Trees trees={trees} a={a} />
       <Walkway shape={shape} a={a} accent={room.palette.accent} store={store} onFloorClick={onFloorClick} />
+      {!isMain && <GalleryWalls shape={shape} a={a} />}
       {!isMain && <GateArches shape={shape} a={a} />}
       {!isMain && <IntroPanel room={room} locale={locale} shape={shape} a={a} />}
       {shape.sections?.map((sec) => <SectionArch key={sec.id} id={sec.id} z={sec.z} shape={shape} locale={locale} room={room} a={a} />)}

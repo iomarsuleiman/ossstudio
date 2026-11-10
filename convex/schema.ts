@@ -44,6 +44,7 @@ export default defineSchema({
       width: v.number(),
       length: v.number(),
       benches: v.array(v.object({ x: v.number(), z: v.number(), rotY: v.optional(v.number()) })),
+      partitions: v.optional(v.array(v.object({ x: v.number(), z: v.number(), hx: v.number(), hz: v.number() }))),
       sections: v.optional(v.array(v.object({ id: v.union(v.literal("linux"), v.literal("inventions")), z: v.number() }))),
     }),
   }).index("by_roomId", ["roomId"]),
