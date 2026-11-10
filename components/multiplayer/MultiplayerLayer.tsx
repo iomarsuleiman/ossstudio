@@ -2,6 +2,7 @@
 
 import { Component, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { ConvexProvider, ConvexReactClient, useConvex, useQuery } from "convex/react";
+import { createPortal } from "react-dom";
 import { api } from "@/convex/_generated/api";
 import type { GalleryContent, Locale, RoomId } from "@/content";
 import type { NetStore, RemoteRow } from "@/lib/multiplayer/net";
@@ -43,6 +44,7 @@ export interface MultiplayerProps {
   locale: Locale;
   roomId: RoomId;
   entered: boolean;
+  hudTarget: HTMLElement | null;
   /** HUD visible (not behind an exhibit page or overlay). */
   hud: boolean;
   chatOpen: boolean;
@@ -96,7 +98,7 @@ class LiveBoundary extends Component<{ net: NetStore; locale: Locale; onRetry: (
 
 type Me = { id: string; name: string; color: string };
 
-function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, setChatOpen }: MultiplayerProps) {
+function Live({ net, store, content, locale, roomId, entered, hud, hudTarget, chatOpen, setChatOpen }: MultiplayerProps) {
   const convex = useConvex();
   const t = MP[locale];
   const token = useMemo(identityToken, []);
@@ -234,7 +236,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
 
   return (
     <>
-      {hud && (
+      {hud && hudTarget && createPortal(
         <div className={`live-hud${chatOpen ? " is-chat-open" : ""}`}>
           <div className="live-controls">
             <span className={`live-presence is-${status}`} aria-label={t.presenceLabel(roomCount, total)} title={t.status[status] || undefined}>
@@ -252,7 +254,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
             </button>
           </div>
           {(status === "busy" || status === "offline") && <span className="live-status" role="status">{t.status[status]}</span>}
-        </div>
+        </div>, hudTarget
       )}
       {chatOpen && me && (
         <ChatPanel

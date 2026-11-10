@@ -99,19 +99,22 @@ button { font: inherit; color: inherit; }
 .no-webgl { position: absolute; inset: 0; display: grid; place-content: center; gap: var(--s4); text-align: center; padding: var(--s5); }
 
 .hud-top {
-  position: absolute; z-index: 10; top: 0; inset-inline: 0;
-  display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s3);
-  padding: var(--s4); pointer-events: none;
+  position: absolute; z-index: 12; top: max(16px, env(safe-area-inset-top)); inset-inline: 16px;
+  display: flex; justify-content: space-between; align-items: center; gap: var(--s3);
+  padding: 6px; border: 1px solid var(--line); border-radius: 20px;
+  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(40, 20, 24, 0.06);
 }
 .hud-top > * { pointer-events: auto; }
 .hud-room {
-  display: flex; flex-direction: column; padding: var(--s2) var(--s4);
-  background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border-radius: var(--radius); border: 1px solid var(--line);
+  display: flex; flex-direction: column; padding: 4px 12px; min-width: 0;
 }
 .hud-site { font-size: 0.75rem; color: var(--muted); letter-spacing: 0.04em; }
 .hud-room-name { font-family: var(--font-head); font-size: 1.35rem; font-weight: 600; line-height: 1.2; }
-.hud-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
+.hud-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex: none; }
+.hud-live-slot:empty { display: none; }
+.hud-top .museum-menu-trigger { border: 0; border-radius: 13px; background: transparent; box-shadow: none; }
+.hud-top .museum-menu-trigger:hover { background: var(--paper); }
 .volume input { width: 90px; accent-color: var(--burgundy); height: 44px; }
 
 /* One quiet entry point for museum navigation and preferences. */
@@ -119,18 +122,24 @@ button { font: inherit; color: inherit; }
 .museum-menu {
   position: fixed; inset: 88px 16px auto auto; margin: 0;
   width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 104px);
-  overflow-y: auto; overscroll-behavior: contain;
-  padding: 20px; border: 1px solid var(--line); border-radius: 22px;
+  overflow: hidden;
+  padding: 0; border: 1px solid var(--line); border-radius: 22px;
   background: var(--cream); color: var(--ink); font: inherit;
   box-shadow: 0 20px 70px rgba(47, 42, 42, 0.2);
   animation: rise 180ms var(--ease) both;
 }
 [dir="rtl"] .museum-menu { inset: 88px auto auto 16px; }
 .museum-menu::backdrop { background: rgba(47, 42, 42, 0.22); }
-.museum-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.museum-menu[open] { display: flex; flex-direction: column; }
+.museum-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: none; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+.museum-menu-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 14px 14px; scrollbar-width: thin; scrollbar-color: rgba(114, 87, 76, 0.35) transparent; }
+.museum-menu-body::-webkit-scrollbar { width: 6px; }
+.museum-menu-body::-webkit-scrollbar-thumb { border-radius: 6px; background: rgba(114, 87, 76, 0.35); }
+.museum-menu-body::-webkit-scrollbar-track { background: transparent; }
 .museum-menu-head h2 { margin: 0; font: 600 1.7rem/1.2 var(--font-head); }
 .menu-close { justify-content: center; width: 44px; padding: 0; font-size: 1.5rem; }
-.museum-menu-section { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 12px; }
+.museum-menu-section { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.museum-menu-section:first-child { margin-top: 0; border-top: 0; }
 .museum-menu-section h3 { margin: 0 8px 8px; color: var(--muted); font-size: 0.78rem; font-weight: 600; }
 .museum-menu-row {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -151,11 +160,12 @@ button { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   .museum-menu, [dir="rtl"] .museum-menu {
     inset: auto 0 0; width: 100%; max-height: calc(100dvh - 24px);
-    border-radius: 24px 24px 0 0; padding: 20px 20px max(20px, env(safe-area-inset-bottom));
+    border-radius: 24px 24px 0 0; padding: 0;
   }
+  .museum-menu-body { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .museum-menu-trigger { min-height: 44px; }
-  .hud-room { min-width: 0; max-width: calc(100% - 120px); }
-  .hud-room-name { overflow-wrap: anywhere; }
+  .hud-room { flex: 1; }
+  .hud-room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 
 .hud-bottom {
@@ -358,7 +368,7 @@ button { font: inherit; color: inherit; }
   .map-canvas { max-width: 380px; }
 }
 @media (max-width: 640px) {
-  .hud-top { padding: var(--s3); }
+  .hud-top { inset-inline: 8px; padding: 4px; gap: 4px; }
   .hud-actions { justify-content: flex-start; }
   .hud-site { display: none; }
   .hud-room-name { font-size: 1.1rem; }
@@ -628,14 +638,12 @@ button { font: inherit; color: inherit; }
 
 /* --- Live visitor presence and public chat ---------------------------------------- */
 .live-hud {
-  position: absolute; z-index: 12; bottom: calc(var(--s4) + env(safe-area-inset-bottom)); right: calc(var(--s4) + env(safe-area-inset-right));
-  display: flex; flex-direction: column; align-items: flex-end; gap: var(--s2); pointer-events: none;
+  position: relative; display: flex; align-items: center; gap: var(--s2);
 }
 .live-hud > * { pointer-events: auto; }
 .live-controls {
   display: flex; align-items: center; padding: 4px; max-width: calc(100vw - 24px);
-  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 4px 20px rgba(40, 20, 24, 0.08);
+  background: transparent;
 }
 .live-presence {
   display: inline-flex; align-items: center; gap: 9px; padding: 6px 14px 6px 10px;
@@ -658,7 +666,6 @@ button { font: inherit; color: inherit; }
 .live-chat-btn:hover, .live-chat-btn[aria-expanded="true"] { background: var(--paper); color: var(--wine); }
 .live-chat-btn:focus-visible { outline: 2px solid var(--burgundy); outline-offset: 2px; }
 [dir="rtl"] .live-chat-btn { border-radius: 13px 0 0 13px; }
-[dir="rtl"] .live-hud { right: auto; left: calc(var(--s4) + env(safe-area-inset-left)); }
 .live-badge {
   display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-inline-start: 4px;
   border-radius: 999px; background: var(--burgundy); color: var(--cream); font-size: 0.72rem; font-weight: 700; line-height: 1;
@@ -675,10 +682,7 @@ button { font: inherit; color: inherit; }
   font-weight: 600; animation: rise 300ms var(--ease) both; max-width: calc(100vw - 32px);
 }
 .live-toast .card-close { position: static; }
-/* Keep the centre of the bottom edge clear for the artwork card and hints. */
-@media (min-width: 641px) and (pointer: fine) { .hud-bottom { padding-inline: 220px; } }
-/* On touch devices, the chat launcher stays above the movement controls. */
-@media (pointer: coarse) { .live-hud { bottom: auto; top: calc(132px + env(safe-area-inset-top)); } }
+.live-status { position: absolute; inset-block-start: calc(100% + 12px); inset-inline-end: 0; width: max-content; max-width: calc(100vw - 32px); }
 
 .chat-panel {
   position: absolute; z-index: 24; top: var(--s4); bottom: var(--s4); right: var(--s4);
@@ -690,16 +694,7 @@ button { font: inherit; color: inherit; }
 /* A bottom sheet keeps public chat separate from touch navigation. */
 .chat-scrim { display: none; }
 @media (max-width: 760px) {
-  .live-hud {
-    position: fixed; top: calc(130px + env(safe-area-inset-top));
-    right: calc(12px + env(safe-area-inset-right)); bottom: auto;
-    align-items: flex-end; gap: 6px;
-  }
-  [dir="rtl"] .live-hud {
-    right: auto; left: calc(12px + env(safe-area-inset-left));
-    align-items: flex-start;
-  }
-  .live-hud.is-chat-open { visibility: hidden; pointer-events: none; }
+  .live-controls { padding: 0; }
   .live-presence { font-size: 0.75rem; padding-inline: 9px 12px; }
   .live-chat-btn { padding-inline: 12px; }
   .chat-scrim {
@@ -727,7 +722,13 @@ button { font: inherit; color: inherit; }
 }
 @media (max-width: 760px) and (max-height: 440px) {
   .chat-panel, [dir="rtl"] .chat-panel { height: min(88dvh, 380px); }
-  .live-hud { top: 92px; }
+}
+@media (max-width: 540px) {
+  .hud-top .live-counts { display: none; }
+  .hud-top .live-presence { padding-inline: 7px; }
+  .hud-top .live-chat-btn { border: 0; padding-inline: 8px; }
+  .hud-top .live-chat-btn > span { display: none; }
+  .hud-top .museum-menu-trigger { padding-inline: 10px; gap: 6px; }
 }
 .chat-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s2) 0 var(--s3); border-bottom: 1px solid var(--line); }
 .chat-head .card-close { position: static; flex: none; }
