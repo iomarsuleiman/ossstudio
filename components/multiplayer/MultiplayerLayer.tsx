@@ -235,7 +235,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
   return (
     <>
       {hud && (
-        <div className="live-hud">
+        <div className={`live-hud${chatOpen ? " is-chat-open" : ""}`}>
           <span className={`live-presence is-${status}`} aria-label={t.presenceLabel(roomCount, total)} title={t.status[status] || undefined}>
             <span className="live-dot" aria-hidden="true" />
             <span aria-hidden="true">{t.here(roomCount)} · {t.inGallery(total)}</span>

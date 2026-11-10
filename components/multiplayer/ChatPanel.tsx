@@ -25,20 +25,41 @@ export function ChatPanel(p: Props) {
   const [tab, setTab] = useState<ChatTab>("room");
   const panel = useRef<HTMLElement>(null);
   useEffect(() => {
-    const onEscape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || (e.target instanceof HTMLTextAreaElement && e.target.value)) return;
-      e.stopPropagation();
-      p.onClose();
+    const previous = document.activeElement;
+    panel.current?.querySelector<HTMLElement>(".chat-head .card-close")?.focus();
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !(e.target instanceof HTMLTextAreaElement && e.target.value)) {
+        e.stopPropagation();
+        p.onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !window.matchMedia("(max-width: 760px)").matches) return;
+      const buttons = [...(panel.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]',
+      ) ?? [])];
+      if (!buttons.length) return;
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
     const el = panel.current;
-    el?.addEventListener("keydown", onEscape);
-    return () => el?.removeEventListener("keydown", onEscape);
+    el?.addEventListener("keydown", onKey);
+    return () => el?.removeEventListener("keydown", onKey);
   }, [p.onClose]);
   const tabs: [ChatTab, string][] = [
     ["room", t.roomTab], ["gallery", t.galleryTab], ["settings", t.settingsTab],
   ];
   return (
-    <aside ref={panel} className="chat-panel" aria-label={t.chat}>
+    <>
+      <button className="chat-scrim" type="button" aria-label={t.close} onClick={p.onClose} />
+      <aside ref={panel} className="chat-panel" role="dialog" aria-label={t.chat}>
       <div className="chat-head">
         <div className="chat-tabs" role="tablist">
           {tabs.map(([id, label]) => (
@@ -59,7 +80,8 @@ export function ChatPanel(p: Props) {
       {tab === "room" && <ChannelView key={p.roomId} {...p} channel={`room:${p.roomId}`} intro={t.roomIntro(p.roomTitle)} t={t} />}
       {tab === "gallery" && <ChannelView key="gallery" {...p} channel="gallery" intro={t.galleryIntro} t={t} />}
       {tab === "settings" && <Settings {...p} t={t} />}
-    </aside>
+      </aside>
+    </>
   );
 }
 

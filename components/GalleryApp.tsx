@@ -709,7 +709,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         </div>
       )}
 
-      {showHud && touch && !mapOpen && <Joystick store={store} label={ui.joystick} />}
+      {showHud && touch && !mapOpen && !chatOpen && <Joystick store={store} label={ui.joystick} />}
       {showHud && mouseLook && <div className="crosshair" aria-hidden="true" />}
       {showHud && mouseLook && hint && <p className="mouse-look-hint" role="note">{ui.mouseLookHint}</p>}
       {showHud && seated && <p className="seated-hint" role="status">{touch ? ui.seatedTouch : ui.seatedDesktop}</p>}
@@ -777,7 +777,7 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
         roomId={roomId}
         entered={entered}
         hud={showHud && !mapOpen && !shelfOpen && !checkout}
-        chatOpen={chatOpen && showHud}
+        chatOpen={chatOpen && showHud && !mapOpen && !shelfOpen && !checkout}
         setChatOpen={setChatOpen}
         entryRequested={entryRequested}
         onAdmitted={finishEntering}
