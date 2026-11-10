@@ -1,6 +1,6 @@
-# Open Source Gallery
+# OSS Studio
 
-A calm, bilingual (English / العربية) 3D art gallery of open-source software and openly available AI models. Visitors walk a small figure through painterly halls, step into artworks to read about each project, and can teleport anywhere with the map.
+A calm, bilingual (English / العربية) 3D museum of open-source software and openly available AI models. Visitors walk a small figure through painterly halls, step into artworks to read about each project, and can teleport anywhere with the map.
 
 Built from the Notion plan **"Open Source Gallery — Experience & Architecture Plan v1"** and its **192 Projects & Artworks** database (36 Opening Collection exhibits, 5 Linux distributions, Wareed marked "Coming Soon", FileFlight flagged as unverified).
 
@@ -23,7 +23,7 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 - **Shareable URLs**: `/{en|ar}`, `/{en|ar}/room/{room}`, `/{en|ar}/exhibit/{slug}`, `/{en|ar}?at={slug}`.
 - **Sound**: original generative ambience (soft pads, sparse piano, room reverb, footsteps, paper sweeps) made with Web Audio. Silent until you choose "Enter with sound". It fades out when the tab is hidden.
 - **Only where you are, and where you can go**: the room you're in and the rooms its doors lead to are prepared in the background (in the Main Hall, the two nearest doors plus any door you walk toward); everything else is released and painted again on demand. Artworks are painted in a Web Worker, the current room first. Progress shows as "12 of 30 nearby artworks ready". Print-size PNGs are made only when you download.
-- **Live visitors, chat and private messages** (optional, with Convex): see other visitors walking around, talk in the room or with everyone (T opens the chat), click the 💬 above someone nearby to message them privately, with typing indicators, unread badges, read receipts, mute and block. A visitor limit with a fair waiting line keeps it calm. See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
+- **Live visitors and public chat** (optional, with Convex): see other visitors, talk in the room or with everyone in the museum (T opens chat), and see typing indicators and persistent history. On mobile, chat opens as a bottom sheet and hides the joystick. Shared benches, map counts and a waiting line support busy rooms. See [docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
 - **Performance**: one persistent canvas that renders on demand and stops drawing entirely a few seconds after everything is still. Quality tiers by device (resolution cap, antialiasing only where it helps) with adaptive resolution; shared materials, merged scenery, cheap texture-based paint shaders; composited transitions. Room changes take about half a second. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for measurements and the benchmark.
 - **Reduced motion**: fades instead of sweeps, no sway or lean, still sculptures and petals.
 
@@ -43,7 +43,7 @@ Built from the Notion plan **"Open Source Gallery — Experience & Architecture 
 ## Run locally
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -53,11 +53,11 @@ Open http://localhost:3000. Without a Convex URL the site uses the bundled catal
 
 ```bash
 npx convex dev            # log in, create the project, writes NEXT_PUBLIC_CONVEX_URL to .env.local
-npx convex run seed:run   # loads all 166 projects, rooms, translations and placements
+npx convex run seed:run   # loads the catalogue of projects, rooms, translations and placements
 npm run dev
 ```
 
-If `npx convex dev` fails with **Could not resolve "convex/server"**, the project's packages aren't installed yet in that folder. Run `npm install` first, then `npx convex dev` again.
+If `npx convex dev` fails with **Could not resolve "convex/server"**, the project's packages aren't installed yet in that folder. Run `npm ci` first, then `npx convex dev` again.
 
 `convex/_generated` is committed so the app type-checks before you run `convex dev`; the CLI regenerates it.
 
@@ -90,7 +90,7 @@ If Convex is missing, empty or unreachable, pages fall back to the bundled catal
 
 ## Live features (optional)
 
-With a Convex deployment (above), visitors see each other, chat and message privately. Optional Convex environment variables:
+With a Convex deployment (above), visitors see each other and use public room and gallery-wide chat. Optional Convex environment variables:
 
 ```bash
 npx convex env set GALLERY_CAPACITY 500                          # visitors inside at once (default 500)
@@ -112,12 +112,12 @@ npm run loadtest -- --url https://<dev-deployment>.convex.cloud --visitors 100
 
 ```
 content/          Catalogue (source of truth for the seed + offline fallback)
-  projects.ts     166 projects with English + Arabic copy and curatorial cautions
+  projects.ts     Projects with English + Arabic copy and curatorial cautions
   opening.ts      Opening Collection: installation ideas, "why it matters", art motifs
   rooms.ts        9 rooms, bilingual signs, palettes, placement overrides
   layout.ts       Deterministic placement of every artwork, door and bench
 convex/           schema, seed, read queries, protected editor mutation,
-                  presence (+ room-frame ticker), chat, dms, queue, crons, tests
+                  presence (+ room-frame ticker), public chat, queue, crons, tests
 app/[locale]/     gallery, room, exhibit and index routes
 components/
   GalleryApp.tsx  Orchestrates world, transitions, exhibit overlay, map, audio, prefetch
@@ -142,3 +142,8 @@ Add `?debug` to any gallery URL to expose `window.__gallery` (world state), whic
 - A Figma design system and playtest-tuned movement and camera values.
 - Native-speaker review of the Arabic copy, plus a final link and licence check.
 
+## Contributing and open source readiness
+
+OSS Studio is open source under the [MIT license](LICENSE). The repository includes automated type checks, tests and production builds for pull requests. Project listings describe third-party software and models; those projects retain their own licenses.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and contribution checks, [SECURITY.md](SECURITY.md) for vulnerability reporting, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.

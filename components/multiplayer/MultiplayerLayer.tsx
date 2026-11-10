@@ -94,7 +94,7 @@ class LiveBoundary extends Component<{ net: NetStore; locale: Locale; onRetry: (
   }
 }
 
-type Me = { id: string; name: string; color: string; allowDMs: boolean };
+type Me = { id: string; name: string; color: string };
 
 function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, setChatOpen }: MultiplayerProps) {
   const convex = useConvex();
@@ -110,7 +110,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
     const r = await convex.mutation(api.presence.join, { token, roomId: store.roomId, x: store.pos.x, z: store.pos.z, yaw: store.yaw });
     interval.current = r.interval;
     joinedRoom.current = store.roomId;
-    const m = { id: r.visitorId, name: r.name, color: r.color, allowDMs: r.allowDMs };
+    const m = { id: r.visitorId, name: r.name, color: r.color };
     setMe(m);
     net.setMe(m);
     net.setStatus("live");
@@ -219,7 +219,7 @@ function Live({ net, store, content, locale, roomId, entered, hud, chatOpen, set
     if (!frame || !me) return;
     let parsed: unknown[][] = [];
     try { parsed = JSON.parse(frame.data) as unknown[][]; } catch { return; }
-    const rows: RemoteRow[] = parsed.map(([id, n, c, x, z, y, m, s, t, o]) => ({ id: id as string, n: n as string, c: c as string, x: x as number, z: z as number, y: y as number, m: !!m, s: (s as string | null) ?? null, t: t as number, o: !!o }));
+    const rows: RemoteRow[] = parsed.map(([id, n, c, x, z, y, m, s, t]) => ({ id: id as string, n: n as string, c: c as string, x: x as number, z: z as number, y: y as number, m: !!m, s: (s as string | null) ?? null, t: t as number }));
     net.ingest(rows, frame.data.length);
     store.takenSeats = new Set(rows.filter((r) => r.id !== me.id && r.s).map((r) => r.s!));
   }, [frame, me, net, store]);

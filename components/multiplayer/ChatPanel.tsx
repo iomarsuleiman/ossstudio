@@ -8,7 +8,7 @@ import { mutes, useMutes } from "@/lib/multiplayer/local";
 import { MP, type MPStrings } from "@/lib/multiplayer/strings";
 
 type ChatTab = "room" | "gallery" | "settings";
-type Me = { id: string; name: string; color: string; allowDMs: boolean };
+type Me = { id: string; name: string; color: string };
 
 interface Props {
   token: string;
