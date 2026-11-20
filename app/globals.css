@@ -102,7 +102,7 @@ button { font: inherit; color: inherit; }
   position: absolute; z-index: 12; top: max(16px, env(safe-area-inset-top)); inset-inline: 16px;
   display: flex; justify-content: space-between; align-items: center; gap: var(--s3);
   padding: 6px; border: 1px solid var(--line); border-radius: 20px;
-  background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: rgba(255, 248, 235, 0.96);
   box-shadow: 0 4px 24px rgba(40, 20, 24, 0.06);
 }
 .hud-top > * { pointer-events: auto; }
@@ -179,7 +179,7 @@ button { font: inherit; color: inherit; }
   position: relative;
   display: grid; gap: var(--s1); justify-items: center; text-align: center;
   max-width: 440px; padding: var(--s4) var(--s5);
-  background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 248, 235, 0.96);
   border-radius: var(--radius); border: 1px solid var(--line);
   box-shadow: 0 12px 40px rgba(94, 40, 54, 0.12);
   animation: rise 420ms var(--ease) both;

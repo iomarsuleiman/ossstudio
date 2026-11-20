@@ -62,21 +62,21 @@ JavaScript in those windows is under 100 ms in total.
 
 | Change | Why it mattered |
 |---|---|
-| Watercolour noise from one precomputed texture | Every painted pixel used to run two 4-octave noise functions (~32 `sin` calls). Now it's two texture reads. |
+| Watercolour noise from one precomputed texture | Every painted pixel used to run two 4-octave noise functions (~32 `sin` calls). Painted surfaces now sample mipmapped noise once per pixel, which smooths distant grain. |
 | Sky drawn after the scenery | The depth test skips sky pixels already covered by hills, arches and the walkway. |
 | Shared materials and geometry | Identical paint materials, artwork panels and frames are created once and kept across room visits. |
 | Merged scenery | A room's trees, distant arches/spires/ring and each layer of hills are a few meshes instead of dozens. |
 | Lighter geometry | Arch tubes 160×12 → 96×8 segments, lighter sky and spheres, fewer bevel/curve segments. Indistinguishable at walking distance. |
 | GPU petals | Drifting motes move in the vertex shader; no per-frame buffer upload. |
-| Quality tiers | `high` (desktop): up to 1.5× resolution, MSAA on standard screens only; `medium`: 1.25×, no MSAA; `low` (phones): 1×, no petals. Override with `?quality=high|medium|low`. |
-| Adaptive resolution with hysteresis | Drops at once when frames run long, recovers only after two good windows and a 4 s cooldown, so it never flickers. |
+| Quality tiers | High goes up to 1.75×, with MSAA on standard-density screens. Medium goes up to 1.5×. Low runs at 1× and skips petals. Override with `?quality=high`, `?quality=medium`, or `?quality=low`. |
+| Adaptive resolution with hysteresis | Stays at or above one render pixel per CSS pixel. Two good sample windows and a 4 s cooldown let it recover, including on 60 Hz displays. |
 | Idle stops drawing | After 3 s with nothing moving, the canvas stops rendering entirely (no GPU or battery use) until input, a visitor nearby, or a loading texture. |
 | Composited transitions | The ink wash was a clip-path under an SVG turbulence filter, re-rasterised on the CPU every frame. It's now a pre-rasterised mask grown with `transform`. The teleport veil no longer animates a full-screen blur. |
 | Faded halos skipped | Invisible artwork halos no longer draw (no transparent overdraw). |
 | Artworks painted in a Web Worker | `OffscreenCanvas` in `lib/paint.worker.ts`, through a priority queue (the room you're in before prefetch). Browsers without it paint on the main thread one at a time with a yield in between. |
 | Only nearby rooms prepared | The room you're in plus the rooms you can walk to (the two nearest doors in the Main Hall, plus any door you approach). Everything else is released. |
 | Room switch as a React transition | Mounting a room can be spread over frames; the veil waits for the new room to be committed and painted (1.1 s ceiling). |
-| Recently visited rooms stay loaded | The last 4 rooms (3 on medium devices, 2 on phones) stay mounted but hidden, so going back is a visibility switch: no rebuild, no repainting, no texture uploads, and the veil lifts as soon as React commits. Hidden rooms add no draw calls and skip their per-frame animation; clicks and mouse look ignore them. The trade-off is GPU memory, roughly 50 MB of artwork textures per kept room, which is why phones keep fewer. |
+| Recently visited rooms stay loaded | High and medium tiers keep the current and previous rooms mounted. The low tier keeps only the current room. Each extra mounted room can keep roughly 50 MB of artwork textures in GPU memory. |
 | Avatars share resources | Remote figures share geometry and materials; cloth animation only for the nearest 8; at most 40 drawn (24 on phones). |
 
 ## Budgets
@@ -89,7 +89,7 @@ targets to confirm on real devices of those classes:
 |---|---:|---:|---:|
 | Draw calls | ≤ 120 | ≤ 100 | ≤ 80 |
 | Triangles | ≤ 80k | ≤ 70k | ≤ 60k |
-| Render resolution | ≤ 1.5× | ≤ 1.25× | 1× |
+| Render resolution | 1 to 1.75× | 1 to 1.5× | 1× |
 | Other visitors drawn | 40 (8 animated capes) | 40 | 24 |
 | Freezes (>100 ms) while walking | 0 | 0 | 0 |
 

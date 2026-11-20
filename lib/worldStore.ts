@@ -2,6 +2,8 @@
 // React state so walking at 60–120 fps never re-renders the interface.
 import type { DoorPlacement, ExhibitPlacement, RoomId } from "@/content";
 
+export const RUN_SPEED = 4.2; // metres per second
+
 export type WorldMode = "arrival" | "walk" | "entering" | "exhibit" | "exiting" | "transition";
 
 export interface WorldStore {

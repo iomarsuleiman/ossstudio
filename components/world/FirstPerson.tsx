@@ -5,16 +5,16 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { DoorPlacement, ExhibitPlacement, GalleryContent, Room, RoomShape } from "@/content";
 import { BENCH_HALF_DEPTH, BENCH_HALF_LENGTH, BENCH_SEATS, seatPose } from "@/content/layout";
-import type { WorldStore } from "@/lib/worldStore";
+import { RUN_SPEED, type WorldStore } from "@/lib/worldStore";
 import { NavGrid, type Collider } from "@/lib/nav";
 import { INSTALLATION_OFFSET, hasInstallation } from "./Installation";
 import { INTRO_PANEL_INSET } from "@/content/layout";
 
 // First-person movement with a graceful, weighted feel: you ease into a walk
 // and drift to a stop, the view turns smoothly, and the camera sways and
-// leans gently as you move. Walking only: there is no run, jump or physics.
+// leans gently as you move.
 //
-// Controls: W A S D (keyboard), the joystick (touch), drag or mouse look to
+// Controls: W A S D (hold Shift to run), the joystick (touch), drag or mouse look to
 // turn, click/tap the floor to walk there along a path around obstacles,
 // click a bench to sit.
 
@@ -90,7 +90,9 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
   const v = useMemo(() => ({ eye: new THREE.Vector3(), ahead: new THREE.Vector3(), chase: new THREE.Vector3(), focus: new THREE.Vector3(), tmp: new THREE.Vector3() }), []);
 
   const shape = content.shapes.find((s) => s.roomId === room.id)!;
-  const exhibits = useMemo(() => content.exhibits.filter((e) => e.roomId === room.id), [content, room.id]);
+  const exhibits = useMemo(() => content.exhibits
+    .filter((e) => e.roomId === room.id)
+    .map((exhibit) => ({ exhibit, centre: artworkCentre(exhibit) })), [content, room.id]);
   const doors = useMemo(() => content.doors.filter((d) => d.roomId === room.id), [content, room.id]);
   const colliders = useMemo(() => roomColliders(content, room), [content, room]);
   const grid = useMemo(() => new NavGrid(shape.width, shape.length, colliders, RADIUS), [shape, colliders]);
@@ -179,7 +181,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
     const s = store;
-    if (s.roomId !== room.id) return; // the old room may tick once during a switch
+    if (dt <= 0 || s.roomId !== room.id) return;
     const persp = camera as THREE.PerspectiveCamera;
     const aspect = state.size.width / Math.max(1, state.size.height);
     const canWalk = s.mode === "walk";
@@ -236,7 +238,8 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
       s.targetExhibit = null;
       s.targetSeat = null;
       const len = Math.max(1, Math.hypot(f, r));
-      want = { x: ((fwd.x * f + right.x * r) / len) * WALK_SPEED, z: ((fwd.z * f + right.z * r) / len) * WALK_SPEED };
+      const speed = s.keys.has("ShiftLeft") || s.keys.has("ShiftRight") ? RUN_SPEED : WALK_SPEED;
+      want = { x: ((fwd.x * f + right.x * r) / len) * speed, z: ((fwd.z * f + right.z * r) / len) * speed };
     } else if (s.target && canWalk && !sitting) {
       const tx = s.target.x - s.pos.x, tz = s.target.z - s.pos.z;
       const dist = Math.hypot(tx, tz);
@@ -247,7 +250,7 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
           s.target = null;
           s.destination = null;
           if (s.targetExhibit) {
-            const e = exhibits.find((x) => x.id === s.targetExhibit);
+            const e = exhibits.find(({ exhibit }) => exhibit.id === s.targetExhibit)?.exhibit;
             s.targetExhibit = null;
             if (e) s.onArrive?.(e);
           }
@@ -335,15 +338,14 @@ export function FirstPerson({ content, room, store }: { content: GalleryContent;
 
     // --- what you're looking at (highlight only; nothing opens by itself) ------------
     let best: ExhibitPlacement | null = null, bestScore = Infinity;
-    for (const e of exhibits) {
-      const c = artworkCentre(e);
+    for (const { exhibit, centre: c } of exhibits) {
       const dx = c.x - s.pos.x, dz = c.z - s.pos.z;
       const d = Math.hypot(dx, dz);
       if (d > 5.2 || d < 0.3) continue;
       const ang = Math.acos(Math.max(-1, Math.min(1, (dx * fwd.x + dz * fwd.z) / d)));
       if (ang > (d < 3 ? 0.8 : 0.45)) continue;
       const score = ang + d * 0.12;
-      if (score < bestScore) { bestScore = score; best = e; }
+      if (score < bestScore) { bestScore = score; best = exhibit; }
     }
     if (s.mode === "walk" && best?.id !== s.nearby?.id) {
       s.nearby = best;

@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 /** A single arch outline (legs + semicircle) as a smooth tube. */
-export function archTube(width: number, height: number, radius = 0.12) {
+export function archTube(width: number, height: number, radius = 0.12, segments = 96, sides = 8) {
   const r = width / 2;
   const legTop = height - r;
   const pts: THREE.Vector3[] = [];
@@ -16,7 +16,7 @@ export function archTube(width: number, height: number, radius = 0.12) {
   for (let i = 0; i <= 12; i++) pts.push(new THREE.Vector3(r, legTop - (legTop * i) / 12, 0));
   const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
   // 96×8 segments look identical at walking distance to the old 160×12 (unlit, smooth normals).
-  return new THREE.TubeGeometry(curve, 96, radius, 8, false);
+  return new THREE.TubeGeometry(curve, segments, radius, sides, false);
 }
 
 /** Arched-top outline from y=0 to `height`. */

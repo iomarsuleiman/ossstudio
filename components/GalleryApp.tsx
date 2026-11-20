@@ -450,9 +450,10 @@ export default function GalleryApp({ content, locale, initial }: { content: Gall
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (openSlug) { if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); closeExhibit(); } return; }
       if (menuOpen || chatOpen || mapOpen || shelfOpen || checkout || !entered) return;
-      // W A S D only; the arrow keys are left alone (for scrolling and screen readers).
+      // Leave arrow keys available for scrolling and screen readers.
       const move = ["KeyW", "KeyA", "KeyS", "KeyD"];
       if (move.includes(e.code)) { store.keys.add(e.code); e.preventDefault(); return; }
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") { store.keys.add(e.code); return; }
       if (e.code === "Escape") {
         e.preventDefault();
         if (selected) setSelected(null);
