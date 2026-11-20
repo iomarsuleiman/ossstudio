@@ -7,6 +7,8 @@
 // (snapshot interpolation), so movement looks continuous whatever the send
 // rate, and a late packet never makes anyone jump.
 
+import { RUN_SPEED } from "@/lib/worldStore";
+
 export interface RemoteRow {
   id: string;
   n: string; // name
@@ -145,7 +147,7 @@ export class NetStore {
         r.yaw += angleDelta(r.yaw, yaw) * f;
       }
       const sp = Math.hypot(r.x - px, r.z - pz) / Math.max(dt, 1e-3);
-      r.speed += (Math.min(sp, 3) - r.speed) * (1 - Math.exp(-dt / 0.15));
+      r.speed += (Math.min(sp, RUN_SPEED) - r.speed) * (1 - Math.exp(-dt / 0.15));
       r.walkPhase += r.speed * dt * 4.6;
       r.sit += ((r.seat ? 1 : 0) - r.sit) * (1 - Math.exp(-dt / 0.25));
       if (r.speed > 0.05 || Math.abs(r.sit - (r.seat ? 1 : 0)) > 0.01) anyMoving = true;

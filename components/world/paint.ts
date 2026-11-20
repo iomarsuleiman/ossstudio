@@ -48,8 +48,8 @@ export function noiseTexture() {
   noiseTex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
   noiseTex.wrapS = noiseTex.wrapT = THREE.RepeatWrapping;
   noiseTex.magFilter = THREE.LinearFilter;
-  noiseTex.minFilter = THREE.LinearFilter;
-  noiseTex.generateMipmaps = false;
+  noiseTex.minFilter = THREE.LinearMipmapNearestFilter;
+  noiseTex.generateMipmaps = true;
   noiseTex.needsUpdate = true;
   return noiseTex;
 }
@@ -93,12 +93,14 @@ const FRAG = /* glsl */ `
   void main() {
     float t = smoothstep(0.0, 1.0, clamp((vWorld.y - uY0) / (uY1 - uY0), 0.0, 1.0));
     vec3 c = mix(uBottom, uTop, t);
-    float n = fbm(vWorld.xz * 0.45 + vWorld.y * 0.3) * 0.65 + fbm(vec2(vWorld.x + vWorld.z, vWorld.y) * 2.1) * 0.35;
+    float n = fbm(vWorld.xz * 0.6 + vec2(vWorld.y * 0.3, vWorld.y * 0.5));
     c *= 1.0 + (n - 0.5) * uGrain;
     // Soft light catching edges that face the camera's side, like a painted rim.
-    vec3 viewDir = normalize(cameraPosition - vWorld);
-    float rim = pow(1.0 - abs(dot(viewDir, vNormalW)), 2.0);
-    c = mix(c, uRim, rim * uRimAmount);
+    if (uRimAmount > 0.0) {
+      vec3 viewDir = normalize(cameraPosition - vWorld);
+      float edge = 1.0 - abs(dot(viewDir, vNormalW));
+      c = mix(c, uRim, edge * edge * uRimAmount);
+    }
     float f = smoothstep(uFogNear, uFogFar, vDepth);
     c = mix(c, uFog, f);
     gl_FragColor = vec4(c, uOpacity);

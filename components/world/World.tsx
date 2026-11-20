@@ -18,7 +18,7 @@ import { FOG } from "./paint";
 import { RoomActive, isShown } from "./roomActive";
 
 /** Rooms kept mounted after you leave them, by quality tier (bounded by GPU memory: ~50 MB of artwork textures per room). */
-const KEEP_ROOMS = { high: 4, medium: 3, low: 2 } as const;
+const KEEP_ROOMS = { high: 2, medium: 2, low: 1 } as const;
 
 /** Background colour and fog follow the current room (one scene, several mounted rooms). */
 function SceneAtmosphere({ roomId }: { roomId: RoomId }) {
@@ -62,7 +62,7 @@ export default function World({
   return (
     <Canvas
       className="world-canvas"
-      dpr={1}
+      dpr={quality.maxDpr}
       frameloop="demand"
       camera={{ fov: 62, near: 0.05, far: 400, position: [0, 1.62, 8] }}
       gl={{ antialias: quality.antialias, powerPreference: "high-performance" }}

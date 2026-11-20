@@ -347,17 +347,17 @@ function Monuments({ roomId, shape, a }: { roomId: RoomId; shape: RoomShape; a: 
     const q = new THREE.Quaternion();
     const solids: THREE.BufferGeometry[] = [];
     const hills: THREE.BufferGeometry[][] = [[], [], [], [], []];
-    const spire = new THREE.LatheGeometry(Array.from({ length: 18 }, (_, i) => {
-      const t = i / 17;
+    const spire = new THREE.LatheGeometry(Array.from({ length: 12 }, (_, i) => {
+      const t = i / 11;
       return new THREE.Vector2(Math.max(0.001, 0.9 * Math.pow(1 - t, 1.4) * (1 + 0.35 * Math.sin(t * Math.PI))), t);
-    }), 24);
+    }), 12);
     for (const mo of list) {
       if (mo.kind === "arch") {
-        const g = archTube(mo.w, mo.h, mo.w * 0.05);
+        const g = archTube(mo.w, mo.h, mo.w * 0.05, 40, 6);
         g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -0.8, mo.z), q.setFromEuler(new THREE.Euler(0, mo.rot, 0)), new THREE.Vector3(1, 1, 1)));
         solids.push(g);
       } else if (mo.kind === "ring") {
-        const g = new THREE.TorusGeometry(mo.r, mo.r * 0.08, 14, 64);
+        const g = new THREE.TorusGeometry(mo.r, mo.r * 0.08, 8, 40);
         g.applyMatrix4(m.compose(new THREE.Vector3(mo.x, -1, mo.z), q.setFromEuler(new THREE.Euler(0, mo.rot, 0)), new THREE.Vector3(1, 1, 1)));
         solids.push(g);
       } else if (mo.kind === "spire") {
